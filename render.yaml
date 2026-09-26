@@ -5,6 +5,7 @@ services:
     name: talenthub-api
     runtime: node
     plan: free
+    region: frankfurt   # closest Render region to Lagos
     rootDir: app
     # API only: the client is built and served by Vercel, not here.
     buildCommand: npm install
