@@ -113,6 +113,10 @@ by brands through an escrow-protected workflow.
 
 Nine platforms were reviewed across three groups: African influencer-marketing
 platforms, creator monetisation tools, and global freelance marketplaces.
+Figure 1.1 plots them against the two axes that matter: what a brand can
+actually buy, and how well the platform serves African market infrastructure.
+
+> **Figure 1.1 — Competitive positioning of platforms serving African digital creators**
 
 | Platform | Category | Reach | Verification | Escrow | Local payout | Commissioned creative work |
 |---|---|---|---|---|---|---|
@@ -214,7 +218,10 @@ and no increment closes without QA sign-off.
 The **incremental / iterative** model was selected. Each increment passes through
 its own requirements, design, build and test activities and terminates in a
 working, demonstrable slice of the platform; requirements are re-examined at each
-increment boundary rather than frozen after analysis.
+increment boundary rather than frozen after analysis. Figure 1.2 shows the model
+as applied here.
+
+> **Figure 1.2 — The incremental / iterative model as applied to TalentHub**
 
 **Justification.**
 
@@ -242,6 +249,11 @@ retains iteration while still yielding the planning, requirements and design
 artefacts the assessment expects.
 
 ## 1.9 Increment Roadmap
+
+Figure 1.3 gives the six-week schedule, the dependency between increments, and
+the two activities that run continuously across all of them.
+
+> **Figure 1.3 — Six-increment delivery roadmap**
 
 | # | Week | Increment theme | Scope delivered | Exit criterion |
 |---|---|---|---|---|

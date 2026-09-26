@@ -257,7 +257,7 @@ metrics marked `self_declared` rather than failing (FR-12, risk R4). The
 distinction is surfaced in the interface, so a brand always knows which figures
 have been independently confirmed.
 
-### 3.6 Milestone State Model
+## 3.6 Milestone State Model
 
 The milestone is the system's most heavily guarded state machine. Figure 3.5
 gives its permitted transitions; any transition not shown is rejected by the
