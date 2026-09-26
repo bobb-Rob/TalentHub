@@ -1,4 +1,6 @@
-const BASE = '/api';
+// Empty in development (Vite proxies /api) and when the API serves the client
+// itself; set VITE_API_URL at build time when the client is hosted separately.
+const BASE = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '') + '/api';
 let token = localStorage.getItem('th_token') || null;
 
 export const getToken = () => token;

@@ -1,13 +1,13 @@
-# One-click deploy to Render. Point Render at this repository and it reads
-# this file. The service builds the React client and serves it from the same
-# Node process that runs the API, so the whole MVP is a single web service.
+# Render Blueprint for the TalentHub API (and its SQLite database).
+# The React client is hosted separately on Vercel — see app/vercel.json.
 services:
   - type: web
-    name: talenthub
+    name: talenthub-api
     runtime: node
     plan: free
     rootDir: app
-    buildCommand: npm install && npm run build
+    # API only: the client is built and served by Vercel, not here.
+    buildCommand: npm install
     startCommand: npm run start
     healthCheckPath: /api/health
     envVars:
@@ -15,6 +15,10 @@ services:
         value: "22"
       - key: TALENTHUB_SECRET
         generateValue: true
+      # The Vercel client URL, e.g. https://talenthub.vercel.app — set it in the
+      # Render dashboard once Vercel has given you the URL. Comma-separate several.
+      - key: CORS_ORIGIN
+        sync: false
       # On the free plan there is no persistent disk, so the SQLite file lives
       # in the container and is recreated (and reseeded) on each deploy or wake.
       # That is fine for a demo. For persistence, move to a paid plan and add:

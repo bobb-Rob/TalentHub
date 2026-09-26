@@ -9,7 +9,10 @@ import { post, balance, milestoneLedger, reconcile, LedgerError } from './ledger
 import { register, login, currentUser, requireUser, HttpError } from './auth.js';
 
 const app = express();
-app.use(cors());
+// CORS_ORIGIN is a comma-separated allow-list (e.g. the Vercel client URL).
+// Unset, any origin is allowed — fine locally, not in production.
+const allowedOrigins = process.env.CORS_ORIGIN?.split(',').map((o) => o.trim().replace(/\/+$/, ''));
+app.use(cors(allowedOrigins ? { origin: allowedOrigins } : undefined));
 app.use(express.json({ limit: '1mb' }));
 
 const PORT = process.env.PORT || 4000;
@@ -587,8 +590,8 @@ app.get('/api/events', wrap((_req, res) => ok(res, db.prepare(
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
-// In production the API also serves the built client, so the whole MVP is one
-// deployable service rather than two.
+// If a built client is present the API serves it too, so the MVP can also run
+// as one service. On Render the client is not built; Vercel hosts it instead.
 const clientDist = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'dist');
 if (fs.existsSync(clientDist)) {
   app.use(express.static(clientDist));
