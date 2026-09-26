@@ -1,0 +1,35 @@
+{
+  "name": "talenthub-mvp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "TalentHub MVP \u2014 the escrow path end to end (CMP 722, Group 2)",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -n api,web -c cyan,magenta \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:api": "node server/index.js",
+    "dev:web": "vite",
+    "seed": "node server/seed.js",
+    "reset": "node server/seed.js --reset",
+    "build": "vite build",
+    "preview": "vite preview",
+    "start": "node server/seed.js && node server/index.js",
+    "smoke": "node server/smoke.mjs"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^11.5.0",
+    "cors": "^2.8.5",
+    "express": "^4.21.1",
+    "jsonwebtoken": "^9.0.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.3",
+    "concurrently": "^9.0.1",
+    "vite": "^5.4.10"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

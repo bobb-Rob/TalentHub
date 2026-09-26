@@ -1,0 +1,22 @@
+# One-click deploy to Render. Point Render at this repository and it reads
+# this file. The service builds the React client and serves it from the same
+# Node process that runs the API, so the whole MVP is a single web service.
+services:
+  - type: web
+    name: talenthub
+    runtime: node
+    plan: free
+    rootDir: app
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: TALENTHUB_SECRET
+        generateValue: true
+      # On the free plan there is no persistent disk, so the SQLite file lives
+      # in the container and is recreated (and reseeded) on each deploy or wake.
+      # That is fine for a demo. For persistence, move to a paid plan and add:
+      #   disk: { name: data, mountPath: /var/data, sizeGB: 1 }
+      # then set TALENTHUB_DB to /var/data/talenthub.db
