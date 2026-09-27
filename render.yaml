@@ -1,11 +1,13 @@
 # Render Blueprint for the TalentHub API (and its SQLite database).
 # The React client is hosted separately on Vercel — see app/vercel.json.
+# This is the test environment: it deploys from the `staging` branch.
 services:
   - type: web
     name: talenthub-api
     runtime: node
     plan: free
     region: frankfurt   # closest Render region to Lagos
+    branch: staging
     rootDir: app
     # API only: the client is built and served by Vercel, not here.
     buildCommand: npm install
