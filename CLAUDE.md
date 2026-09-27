@@ -40,7 +40,7 @@ deliverable; 5–6 are explicitly de-scopable. See §1.9 of the document.
 | 2 | Creator profiles, portfolio, KYC status, audience linking | **done** |
 | 3 | Discovery, briefs, applications | **done** |
 | 4 | Contracts, milestones, escrow, deliverables, payout | **done** |
-| 5 | Reviews, messaging, notifications, disputes | in progress — disputes done |
+| 5 | Reviews, messaging, notifications, disputes | in progress — messaging left |
 | 6 | Admin console, reporting, accessibility, regression | not started |
 
 ## Running it
@@ -50,7 +50,7 @@ cd app
 npm install
 npm run reset     # wipes and seeds demo data
 npm run dev       # API on :4000, Vite on :5173
-npm run smoke     # 80 assertions: escrow, accounts, briefs/contracts, disputes — run after changes
+npm run smoke     # 103 assertions: escrow, accounts, briefs, disputes, reviews, notifications
 ```
 
 Every seeded account uses the password `password123`. Sign-in has demo buttons.
@@ -102,6 +102,8 @@ These come straight from the design chapter, and the tests enforce them.
 - `paymentProvider()` in `server/index.js` simulates Paystack/Flutterwave. It
   always authorises. Replacing it should not require touching the ledger.
 - KYC is a button that sets a status; no provider call.
+- `emailProvider()` in `server/notify.js` logs `[email stub]` lines instead of
+  sending; every notification is otherwise real.
 - Audience metrics come from the seed or the creator; no OAuth to Instagram or
   TikTok yet. `oauth: true` on `POST /api/creator/social` marks a figure verified.
 
@@ -113,9 +115,13 @@ Increment 5, in order of value to the demo:
    (Figure 3.5 allows `disputed` only from `submitted`); an admin rules release,
    refund or split through `settleEscrow()` in `server/index.js`, the one place
    money leaves escrow.
-2. **Reviews** — two-way, published only when both sides submit or 14 days pass.
-3. **Notifications** — the `events` table is already being written to; surface it.
-4. **Messaging** — scoped to a contract or an open application.
+2. ~~**Reviews**~~ — done. Publication (both reviewed, or 14 days after
+   completion) is applied on read by the `PUBLISHED` SQL in `server/index.js`;
+   an unpublished review's content never leaves the server.
+3. ~~**Notifications**~~ — done. `notify()` in `server/notify.js` writes the
+   in-app inbox; call it next to `logEvent()` for anything a user should hear about.
+4. **Messaging** — scoped to a contract or an open application. The last of
+   Increment 5.
 
 ## Documentation
 

@@ -5,12 +5,13 @@
 import fs from 'node:fs';
 import { db, DB_PATH, id, logEvent } from './db.js';
 import { hash } from './auth.js';
+import { post } from './ledger.js';
 
 const RESET = process.argv.includes('--reset');
 
 if (RESET) {
   db.pragma('foreign_keys = OFF');
-  for (const t of ['disputes', 'ledger_entries', 'payouts', 'deliverables', 'milestones',
+  for (const t of ['notifications', 'reviews', 'disputes', 'ledger_entries', 'payouts', 'deliverables', 'milestones',
                    'contracts', 'applications', 'briefs', 'profile_skills',
                    'portfolio_items', 'social_accounts', 'creator_profiles',
                    'brand_profiles', 'skills', 'users', 'events']) {
@@ -170,6 +171,67 @@ db.prepare(`INSERT INTO applications
   profileIds['zola@talenthub.africa'],
   'Happy to take the edit and the cutdowns. I have turned around similar work in two weeks.',
   36000000);
+
+// Two finished contracts, so ratings exist from the start. Each is paid through
+// the real ledger (fund, then release net of 10% commission), so the books
+// still reconcile. Kwesi's reviews are published because both sides reviewed;
+// Zola's because the brand reviewed 20 days ago and the 14-day window lapsed.
+const past = [
+  { email: 'kwesi@talenthub.africa', title: 'Spring range stills — 8 SKUs', fee: 9000000, daysAgo: 30,
+    reviews: [['brand', 5, 'Sharp, fast and easy to brief. Every shot was usable first time.'],
+              ['creator', 4, 'Clear shot list and prompt payment. Feedback came a little late.']] },
+  { email: 'zola@talenthub.africa', title: 'Founder documentary — social cutdowns', fee: 6000000, daysAgo: 20,
+    reviews: [['brand', 5, 'Turned four hours of interviews into six tight cutdowns. Would hire again.']] },
+];
+for (const job of past) {
+  const creatorId = profileIds[job.email];
+  const briefId = id('brf');
+  db.prepare(`INSERT INTO briefs (brief_id, brand_id, engagement_mode, title, description,
+      budget_min_minor, budget_max_minor, currency_code, status)
+    VALUES (?,?, 'commission', ?, 'Completed engagement.', ?, ?, 'NGN', 'closed')`)
+    .run(briefId, brand_id, job.title, job.fee, job.fee);
+  db.prepare(`INSERT INTO applications (application_id, brief_id, creator_id, cover_note,
+      proposed_fee_minor, status) VALUES (?,?,?, '', ?, 'awarded')`)
+    .run(id('app'), briefId, creatorId, job.fee);
+  const contractId = id('ctr');
+  const ago = `-${job.daysAgo} days`;
+  db.prepare(`INSERT INTO contracts (contract_id, brief_id, creator_id, brand_id, agreed_fee_minor,
+      commission_rate, currency_code, status, brand_accepted_at, creator_accepted_at,
+      created_at, completed_at)
+    VALUES (?,?,?,?,?, 0.10, 'NGN', 'completed', datetime('now', ?, '-10 days'),
+      datetime('now', ?, '-9 days'), datetime('now', ?, '-10 days'), datetime('now', ?))`)
+    .run(contractId, briefId, creatorId, brand_id, job.fee, ago, ago, ago, ago);
+  const milestoneId = id('mst');
+  db.prepare(`INSERT INTO milestones (milestone_id, contract_id, sequence_no, description,
+      amount_minor, status, funded_at, submitted_at, accepted_at)
+    VALUES (?,?, 1, 'Full delivery', ?, 'accepted', datetime('now', ?, '-8 days'),
+      datetime('now', ?, '-1 days'), datetime('now', ?))`)
+    .run(milestoneId, contractId, job.fee, ago, ago, ago);
+  post([
+    { account_type: 'brand_funding', account_owner_id: brand_id, direction: 'debit',
+      amount_minor: job.fee, memo: 'funding escrow' },
+    { account_type: 'escrow', account_owner_id: contractId, direction: 'credit',
+      amount_minor: job.fee, memo: 'held for milestone' },
+  ], { idempotencyKey: `fund:${milestoneId}`, milestoneId });
+  const commission = Math.round(job.fee * 0.10);
+  post([
+    { account_type: 'escrow', account_owner_id: contractId, direction: 'debit',
+      amount_minor: job.fee, memo: 'released on acceptance' },
+    { account_type: 'creator_payable', account_owner_id: creatorId, direction: 'credit',
+      amount_minor: job.fee - commission, memo: 'net of commission' },
+    { account_type: 'platform_commission', direction: 'credit',
+      amount_minor: commission, memo: 'platform commission' },
+  ], { idempotencyKey: `release:${milestoneId}`, milestoneId });
+  db.prepare('UPDATE creator_profiles SET completed_contracts = completed_contracts + 1 WHERE profile_id = ?')
+    .run(creatorId);
+  for (const [role, rating, body] of job.reviews) {
+    const reviewer = role === 'brand' ? brandUser
+      : db.prepare('SELECT user_id FROM creator_profiles WHERE profile_id = ?').get(creatorId).user_id;
+    db.prepare(`INSERT INTO reviews (review_id, contract_id, reviewer_role, reviewer_user_id,
+        rating, body, created_at) VALUES (?,?,?,?,?,?, datetime('now', ?, '+1 days'))`)
+      .run(id('rev'), contractId, role, reviewer, rating, body, ago);
+  }
+}
 
 logEvent(null, null, 'demo.seeded', `${creators.length} creators, ${briefs.length} briefs`);
 

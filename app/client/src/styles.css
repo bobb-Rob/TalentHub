@@ -235,3 +235,45 @@ a.plain:hover { text-decoration: underline; }
   .nav { margin-left: 0; width: 100%; }
 }
 .dispute-box.resolved { border-color: var(--line); background: var(--grey-50); }
+
+/* ---------------------------------------------------------------- reviews */
+.rating { font-size: 13px; font-weight: 600; white-space: nowrap; }
+.rating > span[aria-hidden] { color: #c98a04; }
+.star-input { display: inline-flex; gap: 2px; }
+.star-input label { margin: 0; cursor: pointer; font-size: 26px; line-height: 1;
+                    color: var(--line); position: relative; }
+.star-input label.on { color: #c98a04; }
+.star-input input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.star-input label:focus-within { outline: 2px solid var(--navy-100); border-radius: 4px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.review { border-bottom: 1px solid #eef0f4; padding: 10px 0; }
+.review:last-child { border-bottom: 0; }
+
+/* ---------------------------------------------------------------- notifications */
+.bell { position: relative; }
+.bell > button { position: relative; }
+.bell .count {
+  position: absolute; top: 1px; right: 1px; min-width: 17px; height: 17px; padding: 0 4px;
+  border-radius: 99px; background: #d9480f; color: #fff; font-size: 10.5px; font-weight: 700;
+  display: grid; place-items: center;
+}
+.inbox {
+  position: absolute; right: 0; top: calc(100% + 8px); width: min(380px, calc(100vw - 32px));
+  background: #fff; color: var(--ink); border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: 0 8px 28px rgba(22, 33, 62, .18); z-index: 30; max-height: 70vh; overflow: auto;
+}
+.inbox-head { display: flex; justify-content: space-between; align-items: center;
+              padding: 10px 14px; border-bottom: 1px solid var(--line); position: sticky; top: 0;
+              background: #fff; }
+.inbox-item { display: block; width: 100%; text-align: left; background: #fff; color: var(--ink);
+              border: 0; border-bottom: 1px solid #eef0f4; border-radius: 0; padding: 10px 14px;
+              font-size: 13.5px; }
+.inbox-item:hover:not(:disabled) { background: var(--navy-50); }
+.inbox-item.unread { background: #f5f8fd; font-weight: 600; }
+.inbox-item.unread::before { content: ''; display: inline-block; width: 7px; height: 7px;
+                             border-radius: 50%; background: #d9480f; margin-right: 7px; }
+/* The inbox lives inside .nav, whose button styles are for a navy bar. */
+.nav .inbox button { color: var(--ink); font-size: 13.5px; }
+.nav .inbox button.quiet { color: var(--grey); font-size: 13px; }
+.nav .inbox .inbox-item:hover { background: var(--navy-50); color: var(--ink); }
+.nav .inbox .inbox-item.unread { background: #f5f8fd; }

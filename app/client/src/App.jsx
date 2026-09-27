@@ -6,6 +6,7 @@ import {
 } from './pages.jsx';
 import { CreatorProfile, BrandProfile } from './profile.jsx';
 import { AdminDisputes } from './admin.jsx';
+import { NotificationBell } from './notifications.jsx';
 
 /** A tiny hash router — enough for the MVP, no dependency. */
 function useRoute() {
@@ -87,6 +88,7 @@ export default function App() {
               {label}
             </button>
           ))}
+          <NotificationBell go={go} route={route} />
           <span className="who">
             {name} · {user.role}
           </span>
