@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { api, money, titleCase, COUNTRIES, toMinor } from './api.js';
 import {
   Avatar, AvailabilityBadge, Badge, Banner, Empty, Field, Flow, KycBadge, LedgerTable,
-  MetricBadge, MilestoneBadge, Stat,
+  MetricBadge, MilestoneBadge, Rating, StarInput, Stat,
 } from './components/ui.jsx';
 
 const DEMO = [
@@ -220,6 +220,9 @@ export function Discover({ go }) {
                   {c.completed_contracts > 0 &&
                     <span className="muted"> · {c.completed_contracts} completed</span>}
                 </div>
+                <div style={{ marginTop: 4 }}>
+                  <Rating mean={c.mean_rating} count={c.review_count} compact />
+                </div>
               </div>
             </div>
           </div>
@@ -261,6 +264,8 @@ export function CreatorDetail({ profileId, go }) {
               {money(c.day_rate_minor, c.currency_code)}
             </div>
             <div className="tiny muted">per day</div>
+            <div style={{ marginTop: 8 }}><Rating mean={c.mean_rating} count={c.review_count} /></div>
+            <div className="tiny muted">{c.completed_contracts} completed contract{c.completed_contracts === 1 ? '' : 's'}</div>
           </div>
         </div>
         <p className="small" style={{ marginTop: 14, marginBottom: 0 }}>{c.biography}</p>
@@ -276,6 +281,8 @@ export function CreatorDetail({ profileId, go }) {
           </div>
         </>
       )}
+
+      <ReviewList title="Reviews from brands" reviews={c.reviews} />
 
       <div className="section-label">Portfolio</div>
       <div className="grid three">
@@ -505,6 +512,10 @@ export function BriefDetail({ briefId, user, go, refresh }) {
           {b.legal_name} · budget {money(b.budget_min_minor, b.currency_code)}–{money(b.budget_max_minor, b.currency_code)}
           {' · '}{b.application_count} application{b.application_count === 1 ? '' : 's'}
         </div>
+        <div className="row small" style={{ gap: 8, marginTop: 6 }}>
+          <Rating mean={b.mean_rating} count={b.review_count} />
+          <span className="muted">· {b.brand_completed_contracts} completed contract{b.brand_completed_contracts === 1 ? '' : 's'} on TalentHub</span>
+        </div>
         <p style={{ marginTop: 12, marginBottom: 0 }}>{b.description}</p>
         {isOwner && b.status === 'draft' && (
           <p className="tiny muted" style={{ marginTop: 10, marginBottom: 0 }}>
@@ -512,6 +523,9 @@ export function BriefDetail({ briefId, user, go, refresh }) {
           </p>
         )}
       </div>
+
+      {!isOwner && <ReviewList title={`What creators say about ${b.legal_name}`}
+                               reviews={b.brand_reviews} />}
 
       {isCreator && myApplication && (
         <>
@@ -761,6 +775,8 @@ export function ContractDetail({ contractId, user, go, refresh }) {
         <Banner tone="info">This contract was cancelled before any money moved.</Banner>
       )}
 
+      {c.reviews && <ReviewPanel c={c} isBrand={isBrand} act={act} />}
+
       <div className="section-label">Milestones</div>
       <div className="stack">
         {c.milestones.map((m) => {
@@ -963,6 +979,89 @@ function DisputeNote({ d, m, c, isBrand }) {
           {d.outcome === 'split' && ` — ${money(d.creator_share_minor, c.currency_code)} to the creator (before commission), the rest to the brand`}.
           <span className="muted"> “{d.resolution_note}”</span>
         </p>
+      )}
+    </div>
+  );
+}
+
+/** FR-37 — published reviews, newest first. Renders nothing when there are none. */
+function ReviewList({ title, reviews }) {
+  if (!reviews?.length) return null;
+  return (
+    <>
+      <div className="section-label">{title}</div>
+      <div className="card">
+        {reviews.map((r, i) => (
+          <div key={i} className="review">
+            <div className="row" style={{ gap: 8 }}>
+              <span className="rating"><span aria-hidden="true">{'★'.repeat(r.rating)}</span>
+                <span className="sr-only">{r.rating} of 5</span></span>
+              <strong className="small">{r.reviewer_name}</strong>
+              <span className="tiny muted">· {r.brief_title} · {r.created_at.slice(0, 10)}</span>
+            </div>
+            <p className="small" style={{ margin: '4px 0 0' }}>{r.body}</p>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+/**
+ * FR-37 — the two-way review on a completed contract. The other side's review
+ * stays sealed until you submit yours or the 14-day window closes; the server
+ * never sends its content before then.
+ */
+function ReviewPanel({ c, isBrand, act }) {
+  const [rating, setRating] = useState(0);
+  const [body, setBody] = useState('');
+  const r = c.reviews;
+  const other = isBrand ? c.display_name : c.legal_name;
+
+  return (
+    <div className="card" style={{ marginTop: 12 }}>
+      <h3 style={{ marginBottom: 4 }}>Reviews</h3>
+
+      {r.can_review ? (
+        <>
+          <p className="small muted" style={{ marginTop: 0 }}>
+            How was working with {other}? {r.theirs?.submitted
+              ? `They have already reviewed you — yours unlocks theirs.`
+              : `Neither review is shown until you both submit, or until ${r.window_closes_at.slice(0, 10)}.`}
+          </p>
+          <StarInput value={rating} onChange={setRating} name={`rate-${c.contract_id}`} />
+          <textarea style={{ marginTop: 8 }} value={body} onChange={(e) => setBody(e.target.value)}
+                    placeholder={isBrand ? 'Quality of the work, communication, timing…'
+                                         : 'Clarity of the brief, feedback, payment…'} />
+          <button style={{ marginTop: 8 }} disabled={!rating || !body.trim()} onClick={() => act(
+            () => api(`/contracts/${c.contract_id}/review`, { method: 'POST', body: { rating, body } }),
+            'Thanks — your review is in.')}>
+            Submit review
+          </button>
+        </>
+      ) : !r.mine && (
+        <p className="small muted" style={{ marginTop: 0 }}>The 14-day review window has closed.</p>
+      )}
+
+      {r.mine && (
+        <div className="review">
+          <div className="tiny muted">Your review of {other}</div>
+          <span className="rating">{'★'.repeat(r.mine.rating)}</span>
+          <p className="small" style={{ margin: '4px 0 0' }}>{r.mine.body}</p>
+        </div>
+      )}
+      {r.theirs && (
+        <div className="review">
+          <div className="tiny muted">{other}’s review of you</div>
+          {r.theirs.submitted
+            ? <p className="small muted" style={{ margin: '4px 0 0' }}>
+                Submitted — sealed until you review, or until {r.window_closes_at.slice(0, 10)}.
+              </p>
+            : <>
+                <span className="rating">{'★'.repeat(r.theirs.rating)}</span>
+                <p className="small" style={{ margin: '4px 0 0' }}>{r.theirs.body}</p>
+              </>}
+        </div>
       )}
     </div>
   );

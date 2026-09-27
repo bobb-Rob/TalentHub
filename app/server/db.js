@@ -22,6 +22,7 @@ ensureColumn('creator_profiles', 'languages', 'TEXT');
 ensureColumn('brand_profiles', 'trading_name', 'TEXT');
 ensureColumn('contracts', 'brand_accepted_at', 'TEXT');
 ensureColumn('contracts', 'creator_accepted_at', 'TEXT');
+ensureColumn('contracts', 'completed_at', 'TEXT');
 
 export const id = (prefix) => `${prefix}_${crypto.randomUUID().slice(0, 8)}`;
 

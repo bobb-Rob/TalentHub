@@ -45,7 +45,32 @@ export const AvailabilityBadge = ({ value }) => {
   return <Badge tone={tone}>{label}</Badge>;
 };
 
-export const Banner =({ tone = 'info', children }) =>
+/** FR-38 — a mean rating and how many reviews it rests on; honest when there are none. */
+export const Rating = ({ mean, count, compact }) =>
+  count ? (
+    <span className="rating" title={`${mean} out of 5 from ${count} review${count === 1 ? '' : 's'}`}>
+      <span aria-hidden="true">★</span> {Number(mean).toFixed(1)}
+      <span className="muted"> ({count}{compact ? '' : ` review${count === 1 ? '' : 's'}`})</span>
+    </span>
+  ) : <span className="tiny muted">No reviews yet</span>;
+
+/** A 1–5 picker made of real radio buttons, so it works by keyboard. */
+export function StarInput({ value, onChange, name }) {
+  return (
+    <div className="star-input" role="radiogroup" aria-label="Rating">
+      {[1, 2, 3, 4, 5].map((n) => (
+        <label key={n} className={n <= value ? 'on' : ''} title={`${n} of 5`}>
+          <input type="radio" name={name} value={n} checked={value === n}
+                 onChange={() => onChange(n)} />
+          <span aria-hidden="true">★</span>
+          <span className="sr-only">{n} star{n === 1 ? '' : 's'}</span>
+        </label>
+      ))}
+    </div>
+  );
+}
+
+export const Banner = ({ tone = 'info', children }) =>
   children ? <div className={`banner ${tone}`}>{children}</div> : null;
 
 export const Stat = ({ k, v, sub }) => (

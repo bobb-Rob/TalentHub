@@ -125,6 +125,8 @@ CREATE TABLE IF NOT EXISTS contracts (
                                          'cancelled','disputed')),
   brand_accepted_at   TEXT,                  -- FR-26: both parties accept
   creator_accepted_at TEXT,
+  completed_at        TEXT,                  -- starts the 14-day review window
+
   created_at         TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -210,6 +212,33 @@ CREATE TABLE IF NOT EXISTS disputes (
 -- At most one open dispute per milestone, as a constraint rather than a check.
 CREATE UNIQUE INDEX IF NOT EXISTS ux_dispute_open
   ON disputes (milestone_id) WHERE status = 'open';
+
+-- FR-37 — each party reviews the other once per completed contract. A review
+-- is published when both sides have submitted or 14 days have passed since
+-- completion; that rule is applied on read, so nothing needs a scheduler.
+CREATE TABLE IF NOT EXISTS reviews (
+  review_id        TEXT PRIMARY KEY,
+  contract_id      TEXT NOT NULL REFERENCES contracts(contract_id),
+  reviewer_role    TEXT NOT NULL CHECK (reviewer_role IN ('creator','brand')),
+  reviewer_user_id TEXT NOT NULL REFERENCES users(user_id),
+  rating           INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
+  body             TEXT NOT NULL,
+  created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (contract_id, reviewer_role)
+);
+
+-- FR-40 — in-app notifications; email is simulated and recorded in emailed_at.
+CREATE TABLE IF NOT EXISTS notifications (
+  notification_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id         TEXT NOT NULL REFERENCES users(user_id),
+  kind            TEXT NOT NULL,
+  message         TEXT NOT NULL,
+  link            TEXT,
+  read_at         TEXT,
+  emailed_at      TEXT,
+  created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS ix_notifications_user ON notifications (user_id, notification_id);
 
 CREATE TABLE IF NOT EXISTS events (
   event_id   INTEGER PRIMARY KEY AUTOINCREMENT,
