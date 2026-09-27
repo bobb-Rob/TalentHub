@@ -33,11 +33,31 @@ const mkUser = (email, role) => {
   return user_id;
 };
 
+// FR-09 — the controlled skills taxonomy, grouped by discipline.
+const TAXONOMY = {
+  'Motion design': ['2D animation', '3D motion', 'Kinetic typography', 'Explainer videos'],
+  'Video editing': ['Long-form editing', 'Social cutdowns', 'Colour grading', 'Sound design'],
+  'Photography': ['Product photography', 'Lifestyle photography', 'Editorial photography', 'Retouching'],
+  'Illustration': ['Character design', 'Editorial illustration', 'Storyboarding', 'Book illustration'],
+  'Copywriting': ['Campaign copy', 'Brand voice', 'Long-form writing', 'French copywriting'],
+  'Content creation': ['Short-form video', 'Recipe content', 'Lifestyle content', 'Product reviews'],
+};
+const skillIds = {};
+for (const [discipline, names] of Object.entries(TAXONOMY)) {
+  for (const name of names) {
+    skillIds[name] = id('skl');
+    db.prepare('INSERT INTO skills (skill_id, name, discipline) VALUES (?,?,?)')
+      .run(skillIds[name], name, discipline);
+  }
+}
+
 const creators = [
   { email: 'amara@talenthub.africa', name: 'Amara Okonkwo', disc: 'Motion design',
     city: 'Lagos', cc: 'NG', rate: 8500000, bio:
     'Motion designer working with fintech and FMCG brands across West Africa. Ten years in broadcast graphics before going independent.',
-    kyc: 'verified', modes: 'commission,reach',
+    kyc: 'verified', modes: 'commission,reach', langs: 'English, Igbo',
+    skills: [['2D animation', 'expert'], ['Kinetic typography', 'advanced'],
+             ['Explainer videos', 'advanced']],
     social: [['instagram', '@amara.motion', 18400, 4.2, 'api_verified'],
              ['tiktok', '@amaramotion', 31200, 6.8, 'api_verified']],
     work: [['Sterling Bank — launch film', 'Lead animator'],
@@ -46,26 +66,33 @@ const creators = [
   { email: 'kwesi@talenthub.africa', name: 'Kwesi Boateng', disc: 'Photography',
     city: 'Accra', cc: 'GH', rate: 1200000, bio:
     'Commercial and editorial photographer. Product, lifestyle and campaign stills.',
-    kyc: 'verified', modes: 'commission',
+    kyc: 'verified', modes: 'commission', langs: 'English, Twi',
+    skills: [['Product photography', 'expert'], ['Editorial photography', 'advanced'],
+             ['Retouching', 'intermediate']],
     social: [['instagram', '@kwesishoots', 9800, 3.1, 'self_declared']],
     work: [['Kofi Cocoa — product range', 'Photographer'],
            ['Accra Fashion Week', 'Editorial photographer']] },
   { email: 'zola@talenthub.africa', name: 'Zola Mthembu', disc: 'Video editing',
     city: 'Nairobi', cc: 'KE', rate: 950000, bio:
     'Long-form and short-form editor. Documentary, brand films and social cutdowns.',
-    kyc: 'verified', modes: 'commission',
+    kyc: 'verified', modes: 'commission', langs: 'English, Swahili, Zulu',
+    skills: [['Long-form editing', 'expert'], ['Social cutdowns', 'advanced'],
+             ['Colour grading', 'intermediate']],
     social: [['youtube', '@zolacuts', 4050, 5.4, 'api_verified']],
     work: [['Safaricom brand film', 'Editor'], ['Two-part documentary', 'Lead editor']] },
   { email: 'tunde@talenthub.africa', name: 'Tunde Alabi', disc: 'Illustration',
     city: 'Ibadan', cc: 'NG', rate: 600000, bio:
     'Illustrator and character designer for publishing, advertising and games.',
-    kyc: 'unverified', modes: 'commission',
+    kyc: 'unverified', modes: 'commission', langs: 'English, Yoruba',
+    skills: [['Character design', 'advanced'], ['Book illustration', 'advanced']],
     social: [['instagram', '@tundedraws', 2300, 7.9, 'self_declared']],
     work: [['Children’s book series', 'Illustrator']] },
   { email: 'nadia@talenthub.africa', name: 'Nadia Cherif', disc: 'Copywriting',
     city: 'Casablanca', cc: 'MA', rate: 700000, bio:
     'Bilingual copywriter, French and English. Brand voice, campaign lines, long-form.',
-    kyc: 'verified', modes: 'commission,reach',
+    kyc: 'verified', modes: 'commission,reach', langs: 'French, English, Arabic',
+    skills: [['French copywriting', 'expert'], ['Brand voice', 'advanced'],
+             ['Campaign copy', 'advanced']],
     social: [['instagram', '@nadiawrites', 12600, 3.8, 'api_verified']],
     work: [['Bank rebrand — voice guide', 'Lead writer']] },
 ];
@@ -93,13 +120,19 @@ for (const c of creators) {
     db.prepare(`INSERT INTO portfolio_items
       (item_id, profile_id, title, media_type, role_played, display_order)
       VALUES (?,?,?,'image',?,?)`).run(id('itm'), profile_id, title, role, i));
+  db.prepare('UPDATE creator_profiles SET languages = ? WHERE profile_id = ?')
+    .run(c.langs, profile_id);
+  c.skills.forEach(([name, level]) =>
+    db.prepare('INSERT INTO profile_skills (profile_id, skill_id, proficiency) VALUES (?,?,?)')
+      .run(profile_id, skillIds[name], level));
 }
 
 const brandUser = mkUser('brand@sterling.example', 'brand');
 const brand_id = id('brd');
-db.prepare(`INSERT INTO brand_profiles (brand_id, user_id, legal_name, country_code, sector, website)
-  VALUES (?,?,?,?,?,?)`).run(brand_id, brandUser, 'Sterling Foods Ltd', 'NG',
-  'Food & beverage', 'https://example.com');
+db.prepare(`INSERT INTO brand_profiles
+  (brand_id, user_id, legal_name, trading_name, country_code, sector, website)
+  VALUES (?,?,?,?,?,?,?)`).run(brand_id, brandUser, 'Sterling Foods Ltd', 'Sterling Foods',
+  'NG', 'Food & beverage', 'https://example.com');
 
 const briefs = [
   ['commission', 'Festive campaign film — 45 second cutdown',

@@ -25,7 +25,19 @@ export async function api(path, { method = 'GET', body } = {}) {
   return data;
 }
 
-const SYMBOL = { NGN: '₦', GHS: 'GH₵', KES: 'KSh', MAD: 'MAD ', USD: '$' };
+const SYMBOL = { NGN: '₦', GHS: 'GH₵', KES: 'KSh', ZAR: 'R', MAD: 'MAD ', USD: '$' };
+export const CURRENCIES = Object.keys(SYMBOL);
+export const symbolOf = (currency) => (SYMBOL[currency] ?? currency + ' ').trim();
+
+export const COUNTRIES = [
+  ['NG', 'Nigeria'], ['GH', 'Ghana'], ['KE', 'Kenya'], ['ZA', 'South Africa'],
+  ['MA', 'Morocco'], ['EG', 'Egypt'], ['RW', 'Rwanda'], ['SN', 'Senegal'],
+  ['CI', "Côte d'Ivoire"], ['UG', 'Uganda'], ['TZ', 'Tanzania'], ['ET', 'Ethiopia'],
+];
+
+/** Major units typed into a form → integer minor units; null when blank. */
+export const toMinor = (major) =>
+  major === '' || major == null ? null : Math.round(Number(major) * 100);
 
 /** Money is held in minor units everywhere; it is only ever divided for display. */
 export function money(minor, currency = 'NGN') {

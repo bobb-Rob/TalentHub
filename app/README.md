@@ -54,10 +54,14 @@ screen. Every seeded account uses the password `password123`.
 npm run smoke
 ```
 
-28 assertions walking that same path against a running API, including the cases
-that should fail: applying twice to one brief, submitting against an unfunded
-milestone, a creator trying to accept their own work, funding the same milestone
-twice, and withdrawing more than is available. It finishes by asserting that
+59 assertions against a running API, in three parts: the escrow path itself,
+accounts and profiles (sign-up, profile, skills, portfolio, audience, ID check),
+and the brief and contract lifecycle (drafts, shortlisting, contract acceptance,
+cancellation). They include the cases that should fail: applying twice to one
+brief, funding before the creator accepts, submitting against an unfunded
+milestone, a creator accepting their own work, funding the same milestone twice,
+one brand touching another brand's applications, cancelling once money is in
+escrow, and withdrawing more than is available. It finishes by asserting that
 every transaction in the ledger balances.
 
 ## Deploy

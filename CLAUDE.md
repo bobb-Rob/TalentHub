@@ -50,7 +50,7 @@ cd app
 npm install
 npm run reset     # wipes and seeds demo data
 npm run dev       # API on :4000, Vite on :5173
-npm run smoke     # 28 assertions walking the escrow path — run this after changes
+npm run smoke     # 59 assertions: escrow path, accounts, brief/contract lifecycle — run after changes
 ```
 
 Every seeded account uses the password `password123`. Sign-in has demo buttons.

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { api, money, titleCase } from './api.js';
+import { api, money, titleCase, COUNTRIES, toMinor } from './api.js';
 import {
-  Avatar, Badge, Banner, Empty, Field, Flow, KycBadge, LedgerTable,
+  Avatar, AvailabilityBadge, Badge, Banner, Empty, Field, Flow, KycBadge, LedgerTable,
   MetricBadge, MilestoneBadge, Stat,
 } from './components/ui.jsx';
 
@@ -13,6 +13,7 @@ const DEMO = [
 
 // ---------------------------------------------------------------- sign in
 export function SignIn({ onSignedIn }) {
+  const [mode, setMode] = useState('signin');
   const [email, setEmail] = useState('brand@sterling.example');
   const [password, setPassword] = useState('password123');
   const [busy, setBusy] = useState(false);
@@ -24,10 +25,16 @@ export function SignIn({ onSignedIn }) {
     try {
       const res = await api('/auth/login', {
         method: 'POST',
-        body: { email: asEmail || email, password: 'password123' },
+        // Demo buttons use the shared seed password; the form sends what was typed.
+        body: { email: asEmail || email, password: asEmail ? 'password123' : password },
       });
       onSignedIn(res);
     } catch (e2) { setErr(e2.message); } finally { setBusy(false); }
+  };
+
+  const switchTo = (next) => {
+    setMode(next); setErr('');
+    if (next === 'register') { setEmail(''); setPassword(''); }
   };
 
   return (
@@ -38,7 +45,15 @@ export function SignIn({ onSignedIn }) {
           Creator–brand marketplace for the African digital creator economy
         </p>
       </div>
-      <div className="card">
+      <div className="tabs">
+        <button type="button" className={mode === 'signin' ? 'on' : ''}
+                onClick={() => switchTo('signin')}>Sign in</button>
+        <button type="button" className={mode === 'register' ? 'on' : ''}
+                onClick={() => switchTo('register')}>Create account</button>
+      </div>
+      {mode === 'register'
+        ? <Register onSignedIn={onSignedIn} />
+        : <div className="card">
         <Banner tone="err">{err}</Banner>
         <form onSubmit={submit}>
           <Field label="Email">
@@ -71,7 +86,55 @@ export function SignIn({ onSignedIn }) {
         <p className="tiny muted" style={{ marginTop: 12, marginBottom: 0 }}>
           Every seeded account uses the password <code>password123</code>.
         </p>
-      </div>
+      </div>}
+    </div>
+  );
+}
+
+// FR-01 — register as a creator or a brand; the profile comes next.
+function Register({ onSignedIn }) {
+  const [f, setF] = useState({ role: 'creator', email: '', password: '' });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setBusy(true); setErr('');
+    try {
+      onSignedIn(await api('/auth/register', { method: 'POST', body: f }));
+    } catch (e2) { setErr(e2.message); } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="card">
+      <Banner tone="err">{err}</Banner>
+      <form onSubmit={submit}>
+        <Field label="I am joining as">
+          <div className="choice">
+            {[['creator', 'A creator', 'I make work and get hired'],
+              ['brand', 'A brand', 'I hire creators']].map(([role, label, note]) => (
+              <label key={role} className={f.role === role ? 'on' : ''}>
+                <input type="radio" name="role" value={role} checked={f.role === role}
+                       onChange={() => setF({ ...f, role })} />
+                <strong>{label}</strong>
+                <span className="tiny muted">{note}</span>
+              </label>
+            ))}
+          </div>
+        </Field>
+        <Field label="Email">
+          <input type="email" required value={f.email} autoComplete="email"
+                 onChange={(e) => setF({ ...f, email: e.target.value })} />
+        </Field>
+        <Field label="Password" hint="At least 8 characters.">
+          <input type="password" required minLength={8} value={f.password}
+                 autoComplete="new-password"
+                 onChange={(e) => setF({ ...f, password: e.target.value })} />
+        </Field>
+        <button disabled={busy} style={{ width: '100%' }}>
+          {busy ? 'Creating account…' : 'Create account'}
+        </button>
+      </form>
     </div>
   );
 }
@@ -119,10 +182,7 @@ export function Discover({ go }) {
             <select value={f.country}
                     onChange={(e) => setF({ ...f, country: e.target.value })}>
               <option value="">Any country</option>
-              <option value="NG">Nigeria</option>
-              <option value="GH">Ghana</option>
-              <option value="KE">Kenya</option>
-              <option value="MA">Morocco</option>
+              {COUNTRIES.map(([code, name]) => <option key={code} value={code}>{name}</option>)}
             </select>
           </div>
           <label className="row small" style={{ gap: 6, marginBottom: 0 }}>
@@ -189,7 +249,11 @@ export function CreatorDetail({ profileId, go }) {
               {c.engagement_modes.split(',').map((m) => (
                 <Badge key={m} tone="navy">{m === 'reach' ? 'reach campaigns' : 'commissioned work'}</Badge>
               ))}
+              <AvailabilityBadge value={c.availability} />
             </div>
+            {c.languages && <div className="tiny muted" style={{ marginTop: 6 }}>
+              Speaks {c.languages}
+            </div>}
           </div>
           <div style={{ textAlign: 'right' }}>
             <div style={{ fontSize: 20, fontWeight: 700 }}>
@@ -200,6 +264,17 @@ export function CreatorDetail({ profileId, go }) {
         </div>
         <p className="small" style={{ marginTop: 14, marginBottom: 0 }}>{c.biography}</p>
       </div>
+
+      {c.skills?.length > 0 && (
+        <>
+          <div className="section-label">Skills</div>
+          <div className="row" style={{ gap: 6 }}>
+            {c.skills.map((s) => (
+              <Badge key={s.skill_id} tone="grey">{s.name} · {s.proficiency}</Badge>
+            ))}
+          </div>
+        </>
+      )}
 
       <div className="section-label">Portfolio</div>
       <div className="grid three">
@@ -255,13 +330,16 @@ export function Briefs({ user, go }) {
   const create = async (e) => {
     e.preventDefault();
     setErr('');
+    // Which button submitted the form decides draft vs published (FR-22).
+    const status = e.nativeEvent.submitter?.value === 'draft' ? 'draft' : 'published';
     try {
       await api('/briefs', { method: 'POST', body: {
         title: form.title,
         description: form.description,
         engagement_mode: form.engagement_mode,
-        budget_min_minor: Math.round(Number(form.budget_min) * 100),
-        budget_max_minor: Math.round(Number(form.budget_max) * 100),
+        budget_min_minor: toMinor(form.budget_min),
+        budget_max_minor: toMinor(form.budget_max),
+        status,
       } });
       setOpen(false);
       setForm({ ...form, title: '', description: '' });
@@ -315,7 +393,10 @@ export function Briefs({ user, go }) {
                 </div>
               </Field>
             </div>
-            <button>Publish brief</button>
+            <div className="row">
+              <button value="published">Publish brief</button>
+              <button value="draft" className="ghost">Save as draft</button>
+            </div>
           </form>
         </div>
       )}
@@ -330,7 +411,7 @@ export function Briefs({ user, go }) {
                   <Badge tone={b.engagement_mode === 'reach' ? 'navy' : 'grey'}>
                     {b.engagement_mode === 'reach' ? 'reach' : 'commission'}
                   </Badge>
-                  <Badge tone={b.status === 'published' ? 'green' : 'grey'}>{b.status}</Badge>
+                  <BriefStatus status={b.status} />
                 </div>
                 <div className="small muted" style={{ marginTop: 4 }}>{b.legal_name}</div>
                 <p className="small" style={{ marginTop: 6, marginBottom: 0 }}>
@@ -354,16 +435,26 @@ export function Briefs({ user, go }) {
   );
 }
 
+const BRIEF_TONE = { published: 'green', draft: 'amber', closed: 'grey', withdrawn: 'red' };
+const BriefStatus = ({ status }) => (
+  <Badge tone={BRIEF_TONE[status] || 'grey'}>{status === 'published' ? 'open' : status}</Badge>
+);
+
+const APP_TONE = { awarded: 'green', shortlisted: 'amber', rejected: 'grey', submitted: 'navy' };
+
 export function BriefDetail({ briefId, user, go, refresh }) {
   const [b, setB] = useState(null);
   const [err, setErr] = useState('');
   const [note, setNote] = useState('');
   const [fee, setFee] = useState('300000');
-  const isBrand = user.role === 'brand';
 
   const load = () => api(`/briefs/${briefId}`).then(setB).catch((e) => setErr(e.message));
   useEffect(() => { load(); }, [briefId]);
-  if (!b) return <div className="page"><Empty>Loading…</Empty></div>;
+  if (!b) return <div className="page"><Empty>{err || 'Loading…'}</Empty></div>;
+
+  const isOwner = b.is_owner;
+  const isCreator = user.role === 'creator';
+  const myApplication = isCreator ? b.applications[0] : null;
 
   const act = async (fn) => {
     setErr('');
@@ -373,8 +464,14 @@ export function BriefDetail({ briefId, user, go, refresh }) {
   const apply = (e) => {
     e.preventDefault();
     act(() => api(`/briefs/${briefId}/apply`, { method: 'POST', body: {
-      cover_note: note, proposed_fee_minor: Math.round(Number(fee) * 100) } }));
+      cover_note: note, proposed_fee_minor: toMinor(fee) } }));
   };
+
+  const setBriefStatus = (status) =>
+    act(() => api(`/briefs/${briefId}/status`, { method: 'POST', body: { status } }));
+
+  const setAppStatus = (applicationId, status) =>
+    act(() => api(`/applications/${applicationId}/status`, { method: 'POST', body: { status } }));
 
   const award = (applicationId) =>
     act(async () => {
@@ -390,15 +487,51 @@ export function BriefDetail({ briefId, user, go, refresh }) {
       <div className="card" style={{ marginTop: 12 }}>
         <div className="row" style={{ gap: 8 }}>
           <h2 style={{ margin: 0 }}>{b.title}</h2>
-          <Badge tone={b.status === 'published' ? 'green' : 'grey'}>{b.status}</Badge>
+          <BriefStatus status={b.status} />
+          <div className="spacer" />
+          {isOwner && b.status === 'draft' && (
+            <button className="small" onClick={() => setBriefStatus('published')}>
+              Publish brief
+            </button>
+          )}
+          {isOwner && b.status === 'published' && (
+            <button className="ghost small" onClick={() => setBriefStatus('closed')}>
+              Close to applications
+            </button>
+          )}
         </div>
         <div className="small muted" style={{ marginTop: 4 }}>
           {b.legal_name} · budget {money(b.budget_min_minor, b.currency_code)}–{money(b.budget_max_minor, b.currency_code)}
+          {' · '}{b.application_count} application{b.application_count === 1 ? '' : 's'}
         </div>
         <p style={{ marginTop: 12, marginBottom: 0 }}>{b.description}</p>
+        {isOwner && b.status === 'draft' && (
+          <p className="tiny muted" style={{ marginTop: 10, marginBottom: 0 }}>
+            Only you can see this draft. Creators cannot find or apply to it until you publish it.
+          </p>
+        )}
       </div>
 
-      {!isBrand && b.status === 'published' && (
+      {isCreator && myApplication && (
+        <>
+          <div className="section-label">Your application</div>
+          <div className="card">
+            <div className="row" style={{ gap: 8 }}>
+              <strong>{money(myApplication.proposed_fee_minor, b.currency_code)}</strong>
+              <Badge tone={APP_TONE[myApplication.status]}>{myApplication.status}</Badge>
+            </div>
+            {myApplication.cover_note &&
+              <p className="small" style={{ marginTop: 8, marginBottom: 0 }}>{myApplication.cover_note}</p>}
+            {myApplication.status === 'awarded' && (
+              <p className="small" style={{ marginTop: 8, marginBottom: 0 }}>
+                You were awarded this brief. <a href="#/contracts">Review and accept the contract →</a>
+              </p>
+            )}
+          </div>
+        </>
+      )}
+
+      {isCreator && !myApplication && b.status === 'published' && (
         <>
           <div className="section-label">Apply</div>
           <div className="card">
@@ -417,44 +550,59 @@ export function BriefDetail({ briefId, user, go, refresh }) {
         </>
       )}
 
-      {isBrand && (
+      {isOwner && (
         <>
           <div className="section-label">Applications ({b.applications.length})</div>
           <div className="stack">
-            {b.applications.map((a) => (
-              <div key={a.application_id} className="card">
-                <div className="row" style={{ alignItems: 'flex-start', flexWrap: 'nowrap' }}>
-                  <Avatar name={a.display_name} />
-                  <div style={{ flex: 1 }}>
-                    <div className="row" style={{ gap: 8 }}>
-                      <strong>{a.display_name}</strong>
-                      <KycBadge status={a.kyc_status} />
-                      <Badge tone={a.status === 'awarded' ? 'green'
-                                 : a.status === 'rejected' ? 'grey' : 'navy'}>
-                        {a.status}
-                      </Badge>
+            {b.applications.map((a) => {
+              const open = ['submitted', 'shortlisted'].includes(a.status);
+              return (
+                <div key={a.application_id} className="card">
+                  <div className="row" style={{ alignItems: 'flex-start', flexWrap: 'nowrap' }}>
+                    <Avatar name={a.display_name} />
+                    <div style={{ flex: 1 }}>
+                      <div className="row" style={{ gap: 8 }}>
+                        <a className="plain" href={`#/creators/${a.creator_id}`}>
+                          <strong>{a.display_name}</strong>
+                        </a>
+                        <KycBadge status={a.kyc_status} />
+                        <Badge tone={APP_TONE[a.status]}>{a.status}</Badge>
+                      </div>
+                      <div className="small muted">
+                        {a.primary_discipline} · {a.city}, {a.country_code}
+                      </div>
+                      <p className="small" style={{ marginTop: 6, marginBottom: 0 }}>
+                        {a.cover_note}
+                      </p>
                     </div>
-                    <div className="small muted">
-                      {a.primary_discipline} · {a.city}, {a.country_code}
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontWeight: 700, fontSize: 17 }}>
+                        {money(a.proposed_fee_minor, b.currency_code)}
+                      </div>
+                      {open && (
+                        <div className="stack" style={{ gap: 6, marginTop: 8, alignItems: 'flex-end' }}>
+                          <button className="go small" onClick={() => award(a.application_id)}>
+                            Award this creator
+                          </button>
+                          <div className="row" style={{ gap: 6 }}>
+                            {a.status === 'submitted' && (
+                              <button className="ghost small"
+                                      onClick={() => setAppStatus(a.application_id, 'shortlisted')}>
+                                Shortlist
+                              </button>
+                            )}
+                            <button className="quiet small"
+                                    onClick={() => setAppStatus(a.application_id, 'rejected')}>
+                              Reject
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    <p className="small" style={{ marginTop: 6, marginBottom: 0 }}>
-                      {a.cover_note}
-                    </p>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontWeight: 700, fontSize: 17 }}>
-                      {money(a.proposed_fee_minor, b.currency_code)}
-                    </div>
-                    {a.status === 'submitted' && (
-                      <button className="go small" style={{ marginTop: 8 }}
-                              onClick={() => award(a.application_id)}>
-                        Award this creator
-                      </button>
-                    )}
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
             {!b.applications.length && <Empty>No applications yet.</Empty>}
           </div>
         </>
@@ -516,11 +664,16 @@ export function Contracts({ user, go }) {
           <p>Grouped by what needs your attention.</p>
         </div>
       </div>
-      {group(rows.filter((c) => c.status === 'active' && needsMe(c)),
+      {/* FR-26 — an unaccepted contract needs the creator; the brand just waits. */}
+      {group(rows.filter((c) => (c.status === 'pending_acceptance' && !isBrand) ||
+                                (c.status === 'active' && needsMe(c))),
              'Awaiting your action', 'var(--amber)')}
+      {group(rows.filter((c) => c.status === 'pending_acceptance' && isBrand),
+             'Waiting for the creator to accept', 'var(--grey)')}
       {group(rows.filter((c) => c.status === 'active' && !needsMe(c)),
              'In progress', 'var(--grey)')}
       {group(rows.filter((c) => c.status === 'completed'), 'Completed', 'var(--green)')}
+      {group(rows.filter((c) => c.status === 'cancelled'), 'Cancelled', 'var(--grey)')}
       {!rows.length && <Empty>No contracts yet. Award a brief to create one.</Empty>}
     </div>
   );
@@ -536,6 +689,11 @@ export function ContractDetail({ contractId, user, go, refresh }) {
   const load = () => api(`/contracts/${contractId}`).then(setC).catch((e) => setErr(e.message));
   useEffect(() => { load(); }, [contractId]);
   if (!c) return <div className="page"><Empty>{err || 'Loading…'}</Empty></div>;
+
+  const live = c.status === 'active';
+  // FR-34 — cancellable only while nothing has been funded.
+  const cancellable = ['pending_acceptance', 'active'].includes(c.status) &&
+    c.milestones.every((m) => m.status === 'pending');
 
   const act = async (fn, message) => {
     setErr(''); setOk('');
@@ -568,9 +726,39 @@ export function ContractDetail({ contractId, user, go, refresh }) {
             <div className="tiny muted">
               agreed fee · {(c.commission_rate * 100).toFixed(0)}% platform commission
             </div>
+            <div style={{ marginTop: 6 }}><ContractStatus status={c.status} /></div>
           </div>
         </div>
       </div>
+
+      {c.status === 'pending_acceptance' && !isBrand && (
+        <div className="card notice">
+          <strong>{c.legal_name} has awarded you this work.</strong>
+          <p className="small" style={{ margin: '6px 0 12px' }}>
+            Accepting makes the contract binding: the fee, the {(c.commission_rate * 100).toFixed(0)}%
+            platform commission and the milestones below. The brand can fund milestone 1
+            into escrow once you accept.
+          </p>
+          <div className="row">
+            <button className="go" onClick={() => act(
+              () => api(`/contracts/${c.contract_id}/accept`, { method: 'POST' }),
+              'Contract accepted. The brand can now fund the first milestone.')}>
+              Accept contract
+            </button>
+            <CancelButton label="Decline" c={c} act={act} />
+          </div>
+        </div>
+      )}
+
+      {c.status === 'pending_acceptance' && isBrand && (
+        <Banner tone="info">
+          Waiting for {c.display_name} to accept the contract. You can fund milestones once they do.
+        </Banner>
+      )}
+
+      {c.status === 'cancelled' && (
+        <Banner tone="info">This contract was cancelled before any money moved.</Banner>
+      )}
 
       <div className="section-label">Milestones</div>
       <div className="stack">
@@ -599,7 +787,7 @@ export function ContractDetail({ contractId, user, go, refresh }) {
 
               <Flow status={m.status} />
 
-              {m.status === 'pending' && isBrand && (
+              {m.status === 'pending' && isBrand && live && (
                 <div style={{ background: '#fff', border: '1px solid #eccfa3',
                               borderRadius: 6, padding: 12 }}>
                   <div className="money-line">
@@ -623,7 +811,7 @@ export function ContractDetail({ contractId, user, go, refresh }) {
                 </div>
               )}
 
-              {m.status === 'pending' && !isBrand && (
+              {m.status === 'pending' && !isBrand && live && (
                 <p className="small muted" style={{ marginBottom: 0 }}>
                   Waiting for the brand to fund this milestone. Do not start work until
                   the money is in escrow.
@@ -698,7 +886,41 @@ export function ContractDetail({ contractId, user, go, refresh }) {
           );
         })}
       </div>
+
+      {cancellable && !(c.status === 'pending_acceptance' && !isBrand) && (
+        <div className="row" style={{ marginTop: 16 }}>
+          <CancelButton label="Cancel contract" c={c} act={act} />
+          <span className="tiny muted">
+            Possible until a milestone is funded. After that, only a dispute can unwind it.
+          </span>
+        </div>
+      )}
     </div>
+  );
+}
+
+const CONTRACT_STATUS = {
+  pending_acceptance: ['amber', 'awaiting acceptance'], active: ['navy', 'active'],
+  completed: ['green', 'completed'], cancelled: ['grey', 'cancelled'], disputed: ['red', 'disputed'],
+};
+const ContractStatus = ({ status }) => {
+  const [tone, label] = CONTRACT_STATUS[status] || ['grey', status];
+  return <Badge tone={tone}>{label}</Badge>;
+};
+
+/** FR-34 — a two-step button: the second click confirms, so a stray click cannot cancel. */
+function CancelButton({ label, c, act }) {
+  const [armed, setArmed] = useState(false);
+  if (!armed) return <button className="ghost" onClick={() => setArmed(true)}>{label}</button>;
+  return (
+    <span className="row" style={{ gap: 6 }}>
+      <button className="danger" onClick={() => act(
+        () => api(`/contracts/${c.contract_id}/cancel`, { method: 'POST' }),
+        'Contract cancelled. No money had moved.')}>
+        Yes, {label.toLowerCase()}
+      </button>
+      <button className="quiet" onClick={() => setArmed(false)}>Keep it</button>
+    </span>
   );
 }
 

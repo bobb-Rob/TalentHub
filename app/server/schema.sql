@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS creator_profiles (
   country_code        TEXT NOT NULL,
   city                TEXT,
   primary_discipline  TEXT NOT NULL,
+  languages           TEXT,                                  -- csv: English,Yoruba
   engagement_modes    TEXT NOT NULL DEFAULT 'commission',   -- csv: reach,commission
   day_rate_minor      INTEGER,
   currency_code       TEXT NOT NULL DEFAULT 'NGN',
@@ -38,6 +39,7 @@ CREATE TABLE IF NOT EXISTS brand_profiles (
   brand_id     TEXT PRIMARY KEY,
   user_id      TEXT NOT NULL UNIQUE REFERENCES users(user_id),
   legal_name   TEXT NOT NULL,
+  trading_name TEXT,
   country_code TEXT NOT NULL,
   sector       TEXT,
   website      TEXT
@@ -118,9 +120,11 @@ CREATE TABLE IF NOT EXISTS contracts (
   agreed_fee_minor   INTEGER NOT NULL,
   commission_rate    REAL NOT NULL DEFAULT 0.10,
   currency_code      TEXT NOT NULL DEFAULT 'NGN',
-  status             TEXT NOT NULL DEFAULT 'active'
+  status             TEXT NOT NULL DEFAULT 'pending_acceptance'
                        CHECK (status IN ('pending_acceptance','active','completed',
                                          'cancelled','disputed')),
+  brand_accepted_at   TEXT,                  -- FR-26: both parties accept
+  creator_accepted_at TEXT,
   created_at         TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

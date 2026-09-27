@@ -38,7 +38,14 @@ export const KycBadge = ({ status }) => {
   return <Badge tone={tone}>{label}</Badge>;
 };
 
-export const Banner = ({ tone = 'info', children }) =>
+export const AvailabilityBadge = ({ value }) => {
+  const tone = { available: 'green', limited: 'amber', unavailable: 'grey' }[value] || 'grey';
+  const label = { available: 'available', limited: 'limited availability',
+                  unavailable: 'not taking work' }[value] || value;
+  return <Badge tone={tone}>{label}</Badge>;
+};
+
+export const Banner =({ tone = 'info', children }) =>
   children ? <div className={`banner ${tone}`}>{children}</div> : null;
 
 export const Stat = ({ k, v, sub }) => (
