@@ -120,6 +120,27 @@ If you change the product, change `docs/` too — the chapters are the graded
 artefact and they must describe what was built. Rebuild the Word file with
 `cd docs/build && ./build.sh`. Figures regenerate from `docs/diagrams/`.
 
+## Branches and deployment
+
+```
+feature/* ──PR──▶ develop ──PR──▶ staging ──PR──▶ main
+                                    │
+                                    └─ auto-deploys the test environment
+```
+
+- **`develop`** — integration branch. Every feature or fix is its own branch
+  off `develop` (`feat/…`, `fix/…`, `chore/…`) and comes back by PR.
+- **`staging`** — the deploy branch. Anything merged here goes live on the
+  *test* environment automatically: Render (`talenthub-api`, API + SQLite) and
+  Vercel (`talenthub`, client). Only `develop` is merged into `staging`.
+- **`main`** — the final, reviewed record, reached only by a PR from `staging`
+  once the test environment checks out. Nothing deploys from it yet; a
+  production environment will when TalentHub goes live.
+
+Never commit straight to `develop`, `staging` or `main`, and never PR a
+feature branch into `staging` or `main` directly. Test environment URLs are in
+`app/README.md` under *Deploy*.
+
 ## Team
 
 Robertson (PM1), David (PM2 / Tech Lead), Mercy (QA), Olufems (Developer).

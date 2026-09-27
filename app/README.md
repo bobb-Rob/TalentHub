@@ -66,16 +66,24 @@ every transaction in the ledger balances.
 
 ## Deploy
 
-Two routes, both in the repository:
+The test environment deploys automatically from the **`staging`** branch:
 
-- **Render** — `render.yaml` at the repository root. Point Render at the repo
-  and it builds the client and serves it from the same Node process as the API.
-  On the free plan there is no persistent disk, so the database is recreated and
-  reseeded on each deploy; fine for a demo.
-- **Container** — `Dockerfile` here. Works on Railway, Fly.io or Cloud Run.
-  Mount a volume at `/data` to keep the database.
+| Part | Host | Config | URL |
+|---|---|---|---|
+| Client | Vercel, project root `app` | `vercel.json` | https://talenthub-taupe.vercel.app |
+| API + SQLite | Render, Frankfurt, free plan | `render.yaml` | https://talenthub-api-ih7b.onrender.com |
 
-In production the API serves the built client, so it is one service, not two.
+The client is built with `VITE_API_URL` pointing at the API, and the API only
+accepts browser requests from the origins in `CORS_ORIGIN`. On the free plan
+there is no persistent disk, so the database is recreated and reseeded on each
+deploy or wake; the first request after 15 idle minutes takes about 50 seconds.
+
+There is no production environment yet. `main` deploys nowhere; when the
+platform goes live, a production environment will deploy from `main`.
+
+For a single-service alternative, `Dockerfile` here builds the client and serves
+it from the API process — it works on Railway, Fly.io or Cloud Run. Mount a
+volume at `/data` to keep the database.
 
 ## API
 
