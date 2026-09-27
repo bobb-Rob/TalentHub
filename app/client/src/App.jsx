@@ -5,6 +5,7 @@ import {
   ContractDetail, Money, LedgerPage,
 } from './pages.jsx';
 import { CreatorProfile, BrandProfile } from './profile.jsx';
+import { AdminDisputes } from './admin.jsx';
 
 /** A tiny hash router — enough for the MVP, no dependency. */
 function useRoute() {
@@ -32,7 +33,8 @@ export default function App() {
     setToken(token);
     setUser(u);
     // A new account has no profile yet, and nothing else works without one.
-    go(!u.profile ? '/profile' : u.role === 'brand' ? '/discover' : '/briefs');
+    go(u.role === 'admin' ? '/disputes'
+      : !u.profile ? '/profile' : u.role === 'brand' ? '/discover' : '/briefs');
   };
 
   const refreshUser = () => api('/me').then(setUser);
@@ -42,10 +44,12 @@ export default function App() {
   if (!user) return <SignIn onSignedIn={signedIn} />;
 
   const isBrand = user.role === 'brand';
+  const isAdmin = user.role === 'admin';
   const name = user.profile?.trading_name || user.profile?.legal_name ||
                user.profile?.display_name || user.email;
 
-  const tabs = isBrand
+  const tabs = isAdmin ? [['/disputes', 'Disputes'], ['/ledger', 'Ledger']]
+    : isBrand
     ? [['/discover', 'Find creators'], ['/briefs', 'Briefs'],
        ['/contracts', 'Contracts'], ['/ledger', 'Ledger'], ['/profile', 'Organisation']]
     : [['/briefs', 'Open briefs'], ['/contracts', 'My work'],
@@ -56,7 +60,9 @@ export default function App() {
     ? <BrandProfile user={user} onSaved={refreshUser} />
     : <CreatorProfile user={user} onSaved={refreshUser} go={go} />;
   let view;
-  if (!user.profile || seg[0] === 'profile') view = profilePage;
+  // An administrator has no marketplace profile; everyone else needs one first.
+  if (isAdmin) view = seg[0] === 'ledger' ? <LedgerPage /> : <AdminDisputes />;
+  else if (!user.profile || seg[0] === 'profile') view = profilePage;
   else if (seg[0] === 'creators' && seg[1]) view = <CreatorDetail profileId={seg[1]} go={go} />;
   else if (seg[0] === 'briefs' && seg[1])
     view = <BriefDetail briefId={seg[1]} user={user} go={go} />;
@@ -74,7 +80,7 @@ export default function App() {
       <div className="topbar">
         <div className="brand">TalentHub<span>MVP</span></div>
         <div className="nav">
-          {user.profile && tabs.map(([path, label]) => (
+          {(user.profile || isAdmin) && tabs.map(([path, label]) => (
             <button key={path}
                     className={route.startsWith(path) ? 'on' : ''}
                     onClick={() => go(path)}>
@@ -82,7 +88,7 @@ export default function App() {
             </button>
           ))}
           <span className="who">
-            {name} · {isBrand ? 'brand' : 'creator'}
+            {name} · {user.role}
           </span>
           <button onClick={signOut}>Sign out</button>
         </div>

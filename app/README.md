@@ -54,10 +54,11 @@ screen. Every seeded account uses the password `password123`.
 npm run smoke
 ```
 
-59 assertions against a running API, in three parts: the escrow path itself,
+80 assertions against a running API, in four parts: the escrow path itself,
 accounts and profiles (sign-up, profile, skills, portfolio, audience, ID check),
-and the brief and contract lifecycle (drafts, shortlisting, contract acceptance,
-cancellation). They include the cases that should fail: applying twice to one
+the brief and contract lifecycle (drafts, shortlisting, contract acceptance,
+cancellation), and disputes (every ruling, and the ledger behind each). They
+include the cases that should fail: applying twice to one
 brief, funding before the creator accepts, submitting against an unfunded
 milestone, a creator accepting their own work, funding the same milestone twice,
 one brand touching another brand's applications, cancelling once money is in
@@ -87,28 +88,35 @@ volume at `/data` to keep the database.
 
 ## API
 
+Every route checks the caller's role and ownership on the server.
+
 | Method | Path | Notes |
 |---|---|---|
-| POST | `/api/auth/register` · `/api/auth/login` | bcrypt cost 12, JWT |
+| POST | `/api/auth/register` · `/api/auth/login` | bcrypt cost 12, JWT; lockout after 5 failures |
 | GET | `/api/me` | current user and profile |
 | PUT | `/api/creator/profile` · `/api/brand/profile` | create or update |
-| POST | `/api/creator/portfolio` · `/api/creator/social` · `/api/creator/kyc` | |
-| GET | `/api/creators` | search: `q`, `discipline`, `country`, `mode`, `verified`, `maxRate` |
-| GET | `/api/creators/:id` | full profile |
-| GET · POST | `/api/briefs` | list or publish |
-| GET | `/api/briefs/:id` | brief with applications |
+| GET · PUT | `/api/skills` · `/api/creator/skills` | taxonomy; replace a creator's skills |
+| POST · DELETE | `/api/creator/portfolio` · `/api/creator/portfolio/:id` | at most 20 items |
+| POST | `/api/creator/social` · `/api/creator/kyc` | typed-in figures are self-declared; KYC simulated |
+| GET | `/api/creators` · `/api/creators/:id` | search: `q`, `discipline`, `country`, `mode`, `verified`, `maxRate` |
+| GET · POST | `/api/briefs` | list, or create as draft or published |
+| GET | `/api/briefs/:id` | applications visible only to the owning brand |
+| POST | `/api/briefs/:id/status` | draft → published → closed |
 | POST | `/api/briefs/:id/apply` | one per creator per brief |
-| POST | `/api/applications/:id/award` | creates the contract and milestones |
+| POST | `/api/applications/:id/status` · `/award` | shortlist, reject, award |
 | GET | `/api/contracts` · `/api/contracts/:id` | scoped to the signed-in party |
-| POST | `/api/milestones/:id/fund` | escrow posting |
-| POST | `/api/milestones/:id/submit` | requires a funded milestone |
-| POST | `/api/milestones/:id/revise` | capped at two |
-| POST | `/api/milestones/:id/accept` | release, net of commission |
+| POST | `/api/contracts/:id/accept` · `/cancel` | creator accepts; either cancels before funding |
+| POST | `/api/milestones/:id/fund` | escrow posting; contract must be accepted |
+| POST | `/api/milestones/:id/submit` · `/revise` · `/accept` | revisions capped at two |
+| POST | `/api/milestones/:id/dispute` | submitted milestones only; freezes it |
+| GET | `/api/admin/disputes` | admin: the queue, with deliverables |
+| POST | `/api/admin/disputes/:id/resolve` | admin: release, refund or split, with a reason |
 | GET | `/api/creator/balance` · POST `/api/payouts` | withdrawal |
 | GET | `/api/ledger` · `/api/ledger/reconcile` | the audit view |
 
 ## Not built yet
 
-Disputes, reviews, messaging and notifications are Increment 5. The `disputed`,
-`refunded` and `split` states already exist in the schema and the state machine;
-they have no routes or interface yet.
+Reviews, messaging and notifications (the rest of Increment 5), and the rest of
+the admin console (Increment 6). Portfolio items have no file upload yet, KYC
+and payments are simulated, and audience figures are not fetched from the
+platforms.

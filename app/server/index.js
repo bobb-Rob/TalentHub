@@ -513,6 +513,11 @@ function contractView(contract_id) {
     m.deliverables = db.prepare('SELECT * FROM deliverables WHERE milestone_id = ? ORDER BY created_at')
                        .all(m.milestone_id);
     m.ledger = milestoneLedger(m.milestone_id);
+    // Both parties see the case file; who ruled is the platform, not a named admin.
+    m.dispute = db.prepare(`SELECT dispute_id, raised_by_role, reason, status, outcome,
+      creator_share_minor, resolution_note, created_at, resolved_at
+      FROM disputes WHERE milestone_id = ? ORDER BY created_at DESC LIMIT 1`)
+      .get(m.milestone_id) || null;
     m.commission_minor = Math.round(m.amount_minor * c.commission_rate);
     m.net_minor = m.amount_minor - m.commission_minor;
   }
@@ -649,49 +654,171 @@ app.post('/api/milestones/:id/revise', requireUser('brand'), wrap((req, res) => 
   ok(res, { contract: contractView(c.contract_id) });
 }));
 
+const commissionOn = (amount, c) => Math.round(amount * c.commission_rate);
+
+/**
+ * Move a milestone's escrow to its final destination. Every way money leaves
+ * escrow goes through here, so each is one balanced transaction under a key
+ * derived from the milestone — release, refund and split are mutually
+ * exclusive outcomes, and the unique index stops any of them posting twice.
+ *
+ *   release  escrow → creator (net of commission) + platform commission
+ *   refund   escrow → back to the brand; the platform takes nothing
+ *   split    escrow → creator share (net of commission on that share only)
+ *                   + commission + the remainder back to the brand
+ */
+function settleEscrow(m, c, outcome, creatorShare = 0) {
+  const gross = { release: m.amount_minor, refund: 0, split: creatorShare }[outcome];
+  const commission = commissionOn(gross, c);
+  const net = gross - commission;
+  const toBrand = m.amount_minor - gross;
+  const lines = [
+    { account_type: 'escrow', account_owner_id: c.contract_id, direction: 'debit',
+      amount_minor: m.amount_minor,
+      memo: { release: 'released on acceptance', refund: 'refunded by adjudication',
+              split: 'split by adjudication' }[outcome] },
+  ];
+  if (net > 0) lines.push({ account_type: 'creator_payable', account_owner_id: c.creator_id,
+    direction: 'credit', amount_minor: net, memo: 'net of commission' });
+  if (commission > 0) lines.push({ account_type: 'platform_commission', account_owner_id: null,
+    direction: 'credit', amount_minor: commission, memo: 'platform commission' });
+  if (toBrand > 0) lines.push({ account_type: 'brand_funding', account_owner_id: c.brand_id,
+    direction: 'credit', amount_minor: toBrand, memo: 'returned to brand' });
+  const result = post(lines, { idempotencyKey: `${outcome}:${m.milestone_id}`,
+    milestoneId: m.milestone_id, currency: c.currency_code });
+  return { ...result, net_minor: net, commission_minor: commission, refunded_minor: toBrand };
+}
+
+const TERMINAL = ['accepted', 'refunded', 'split', 'cancelled'];
+
+/** Close the contract once no milestone can move again. */
+function completeIfDone(c) {
+  const ms = db.prepare('SELECT status FROM milestones WHERE contract_id = ?').all(c.contract_id);
+  if (!ms.every((m) => TERMINAL.includes(m.status))) return;
+  db.prepare("UPDATE contracts SET status = 'completed' WHERE contract_id = ?").run(c.contract_id);
+  // Only work the creator was actually paid for counts toward their record.
+  if (ms.some((m) => ['accepted', 'split'].includes(m.status))) {
+    db.prepare(`UPDATE creator_profiles SET completed_contracts = completed_contracts + 1
+                WHERE profile_id = ?`).run(c.creator_id);
+  }
+}
+
 // UC-09 — accept the deliverable and release payment.
 app.post('/api/milestones/:id/accept', requireUser('brand'), wrap((req, res) => {
   const { m, c } = loadMilestone(req.params.id);
   if (c.brand_id !== brandOf(req)?.brand_id) throw new HttpError(403, 'not your contract');
+  // The state machine allows disputed → accepted, but that edge belongs to the
+  // administrator's ruling: a brand must not be able to settle its own dispute.
+  if (m.status === 'disputed')
+    throw new HttpError(409, 'this milestone is in dispute — an administrator will rule on it');
   moveTo(m, 'accepted');
-
-  const commission = Math.round(m.amount_minor * c.commission_rate);
-  const net = m.amount_minor - commission;
-  const idempotencyKey = `release:${m.milestone_id}`;
 
   // Status change and ledger posting happen in one database transaction: a
   // partially applied release cannot exist.
-  const apply = db.transaction(() => {
-    const result = post([
-      { account_type: 'escrow', account_owner_id: c.contract_id,
-        direction: 'debit', amount_minor: m.amount_minor, memo: 'released on acceptance' },
-      { account_type: 'creator_payable', account_owner_id: c.creator_id,
-        direction: 'credit', amount_minor: net, memo: 'net of commission' },
-      { account_type: 'platform_commission', account_owner_id: null,
-        direction: 'credit', amount_minor: commission, memo: 'platform commission' },
-    ], { idempotencyKey, milestoneId: m.milestone_id, currency: c.currency_code });
-
+  const result = db.transaction(() => {
+    const r = settleEscrow(m, c, 'release');
     db.prepare(`UPDATE milestones SET status = 'accepted', accepted_at = datetime('now')
                 WHERE milestone_id = ?`).run(m.milestone_id);
+    completeIfDone(c);
+    return r;
+  })();
 
-    const remaining = db.prepare(
-      "SELECT COUNT(*) n FROM milestones WHERE contract_id = ? AND status <> 'accepted'")
-      .get(c.contract_id).n;
-    if (remaining === 0) {
-      db.prepare("UPDATE contracts SET status = 'completed' WHERE contract_id = ?")
-        .run(c.contract_id);
-      db.prepare(`UPDATE creator_profiles
-                  SET completed_contracts = completed_contracts + 1
-                  WHERE profile_id = ?`).run(c.creator_id);
-    }
-    return result;
-  });
-
-  const result = apply();
   logEvent(req.user.user_id, m.milestone_id, 'milestone.accepted',
-           `net ${net}, commission ${commission}`);
-  ok(res, { ...result, net_minor: net, commission_minor: commission,
-            contract: contractView(c.contract_id) });
+           `net ${result.net_minor}, commission ${result.commission_minor}`);
+  ok(res, { ...result, contract: contractView(c.contract_id) });
+}));
+
+// FR-35 — either party may dispute a submitted deliverable. The milestone is
+// frozen: the state machine offers nothing from `disputed` but an adjudicated
+// outcome, so no one can submit, revise or accept until an administrator rules.
+app.post('/api/milestones/:id/dispute', requireUser('creator', 'brand'), wrap((req, res) => {
+  const { m, c } = loadMilestone(req.params.id);
+  const mine = req.user.role === 'creator'
+    ? c.creator_id === creatorOf(req)?.profile_id
+    : c.brand_id === brandOf(req)?.brand_id;
+  if (!mine) throw new HttpError(403, 'not your contract');
+  const reason = String(req.body?.reason || '').trim();
+  if (reason.length < 10)
+    throw new HttpError(400, 'explain the dispute in at least a sentence — the administrator rules on it');
+  moveTo(m, 'disputed');
+
+  const dispute_id = id('dsp');
+  db.transaction(() => {
+    db.prepare(`INSERT INTO disputes (dispute_id, milestone_id, raised_by, raised_by_role, reason)
+                VALUES (?,?,?,?,?)`).run(dispute_id, m.milestone_id, req.user.user_id,
+      req.user.role, reason);
+    db.prepare("UPDATE milestones SET status = 'disputed' WHERE milestone_id = ?")
+      .run(m.milestone_id);
+  })();
+  logEvent(req.user.user_id, m.milestone_id, 'milestone.disputed', reason);
+  ok(res, { dispute_id, contract: contractView(c.contract_id) });
+}));
+
+// ---------------------------------------------------------------- admin
+const disputeView = (where, args = []) => db.prepare(`
+  SELECT d.*, m.description AS milestone_description, m.sequence_no, m.amount_minor,
+         c.contract_id, c.currency_code, c.commission_rate, br.title AS brief_title,
+         bp.legal_name, cp.display_name, u.email AS raised_by_email,
+         ru.email AS resolved_by_email
+  FROM disputes d
+  JOIN milestones m ON m.milestone_id = d.milestone_id
+  JOIN contracts c ON c.contract_id = m.contract_id
+  JOIN briefs br ON br.brief_id = c.brief_id
+  JOIN brand_profiles bp ON bp.brand_id = c.brand_id
+  JOIN creator_profiles cp ON cp.profile_id = c.creator_id
+  JOIN users u ON u.user_id = d.raised_by
+  LEFT JOIN users ru ON ru.user_id = d.resolved_by
+  ${where} ORDER BY d.created_at DESC`).all(...args);
+
+app.get('/api/admin/disputes', requireUser('admin'), wrap((_req, res) => {
+  const rows = disputeView('');
+  for (const d of rows) {
+    d.deliverables = db.prepare(
+      'SELECT title, note, external_link, created_at FROM deliverables WHERE milestone_id = ? ORDER BY created_at')
+      .all(d.milestone_id);
+  }
+  ok(res, rows);
+}));
+
+// FR-36 — the ruling. Outcome, money movement, milestone state and the case
+// file's resolution are written in one transaction; a reason is mandatory.
+app.post('/api/admin/disputes/:id/resolve', requireUser('admin'), wrap((req, res) => {
+  const d = db.prepare('SELECT * FROM disputes WHERE dispute_id = ?').get(req.params.id);
+  if (!d) return res.status(404).json({ error: 'no such dispute' });
+  if (d.status !== 'open') throw new HttpError(409, 'this dispute has already been resolved');
+
+  const { outcome } = req.body || {};
+  const note = String(req.body?.note || '').trim();
+  if (!['release', 'refund', 'split'].includes(outcome))
+    throw new HttpError(400, 'outcome must be release, refund or split');
+  if (!note) throw new HttpError(400, 'record the reason for the ruling');
+
+  const { m, c } = loadMilestone(d.milestone_id);
+  let share = 0;
+  if (outcome === 'split') {
+    share = req.body.creator_share_minor;
+    if (!Number.isInteger(share) || share <= 0 || share >= m.amount_minor)
+      throw new HttpError(400,
+        'a split gives the creator a whole number of minor units, more than zero and less than the milestone — otherwise it is a refund or a release');
+  }
+  const next = { release: 'accepted', refund: 'refunded', split: 'split' }[outcome];
+  moveTo(m, next);
+
+  const result = db.transaction(() => {
+    const r = settleEscrow(m, c, outcome, share);
+    db.prepare(`UPDATE milestones SET status = ?,
+                accepted_at = CASE WHEN ? = 'accepted' THEN datetime('now') ELSE accepted_at END
+                WHERE milestone_id = ?`).run(next, next, m.milestone_id);
+    db.prepare(`UPDATE disputes SET status = 'resolved', outcome = ?, creator_share_minor = ?,
+                resolution_note = ?, resolved_by = ?, resolved_at = datetime('now')
+                WHERE dispute_id = ?`).run(outcome, outcome === 'split' ? share : null,
+      note, req.user.user_id, d.dispute_id);
+    completeIfDone(c);
+    return r;
+  })();
+
+  logEvent(req.user.user_id, m.milestone_id, `dispute.${outcome}`, note);
+  ok(res, { ...result, outcome, dispute: disputeView('WHERE d.dispute_id = ?', [d.dispute_id])[0] });
 }));
 
 app.get('/api/milestones/:id/ledger', wrap((req, res) =>

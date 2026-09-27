@@ -276,6 +276,115 @@ const reopened = await call('POST', `/briefs/${draft.brief_id}/status`,
   { token: brand.token, body: { status: 'published' } });
 check('an awarded brief cannot be reopened', reopened.status === 409);
 
+// ---------------------------------------------------------------- disputes
+console.log('\nDisputes\n');
+
+const admin = await login('admin@talenthub.example');
+check('the administrator signs in', !!admin.token && admin.user?.role === 'admin');
+
+// A three-milestone contract, so each ruling gets its own milestone.
+const dBrief = (await call('POST', '/briefs', { token: brand.token, body: {
+  title: `Smoke dispute brief ${stamp}`, description: 'Walks every dispute outcome.',
+  budget_min_minor: 100000, budget_max_minor: 400000 } })).body;
+const dApp = (await call('POST', `/briefs/${dBrief.brief_id}/apply`,
+  { token: ct, body: { proposed_fee_minor: 300000, cover_note: 'Ready.' } })).body;
+const dAward = (await call('POST', `/applications/${dApp.application_id}/award`, {
+  token: brand.token, body: { milestones: [
+    { description: 'Shoot', amount_minor: 100000 },
+    { description: 'Edit', amount_minor: 100000 },
+    { description: 'Deliver', amount_minor: 100000 }] } })).body;
+await call('POST', `/contracts/${dAward.contract_id}/accept`, { token: ct });
+let dc = (await call('GET', `/contracts/${dAward.contract_id}`, { token: ct })).body;
+const [dm1, dm2, dm3] = dc.milestones;
+for (const m of dc.milestones) {
+  await call('POST', `/milestones/${m.milestone_id}/fund`, { token: brand.token });
+  await call('POST', `/milestones/${m.milestone_id}/submit`,
+    { token: ct, body: { title: `Work for ${m.description}` } });
+}
+const balBefore = (await call('GET', '/creator/balance', { token: ct })).body.available_minor;
+
+const outsider = await call('POST', `/milestones/${dm1.milestone_id}/dispute`,
+  { token: creator.token, body: { reason: 'I am not a party to this contract.' } });
+check('only a party to the contract can raise a dispute', outsider.status === 403);
+const noReason = await call('POST', `/milestones/${dm1.milestone_id}/dispute`,
+  { token: brand.token, body: { reason: 'no' } });
+check('a dispute needs a stated reason', noReason.status === 400);
+
+const raised = await call('POST', `/milestones/${dm1.milestone_id}/dispute`,
+  { token: brand.token, body: { reason: 'Only half the shot list was delivered.' } });
+check('the brand disputes a submitted deliverable (FR-35)',
+  raised.body?.contract?.milestones?.[0]?.status === 'disputed', JSON.stringify(raised.body));
+const twice = await call('POST', `/milestones/${dm1.milestone_id}/dispute`,
+  { token: ct, body: { reason: 'Disputing the same milestone again.' } });
+check('a disputed milestone cannot be disputed again', twice.status === 409);
+
+const selfSettle = await call('POST', `/milestones/${dm1.milestone_id}/accept`, { token: brand.token });
+check('the brand cannot settle its own dispute by accepting', selfSettle.status === 409);
+const frozenSubmit = await call('POST', `/milestones/${dm1.milestone_id}/submit`,
+  { token: ct, body: { title: 'Sneaking a resubmission in' } });
+check('the creator cannot resubmit while frozen', frozenSubmit.status === 409);
+const frozenRevise = await call('POST', `/milestones/${dm1.milestone_id}/revise`,
+  { token: brand.token, body: { reason: 'x' } });
+check('the brand cannot request a revision while frozen', frozenRevise.status === 409);
+
+const queue = (await call('GET', '/admin/disputes', { token: admin.token })).body;
+const d1 = queue.find((d) => d.milestone_id === dm1.milestone_id);
+check('the dispute reaches the administrator with its evidence',
+  d1?.status === 'open' && d1.deliverables.length === 1, JSON.stringify(d1));
+const notAdmin = await call('POST', `/admin/disputes/${d1.dispute_id}/resolve`,
+  { token: brand.token, body: { outcome: 'refund', note: 'Brand rules for itself.' } });
+check('only an administrator can rule', notAdmin.status === 403);
+const noNote = await call('POST', `/admin/disputes/${d1.dispute_id}/resolve`,
+  { token: admin.token, body: { outcome: 'refund' } });
+check('a ruling needs a recorded reason (FR-36)', noNote.status === 400);
+const badSplit = await call('POST', `/admin/disputes/${d1.dispute_id}/resolve`,
+  { token: admin.token, body: { outcome: 'split', creator_share_minor: 100000, note: 'All of it.' } });
+check('a split must leave something on both sides', badSplit.status === 400);
+
+// split: 40% to the creator, commission on that share only, the rest back to the brand
+const split = await call('POST', `/admin/disputes/${d1.dispute_id}/resolve`, { token: admin.token,
+  body: { outcome: 'split', creator_share_minor: 40000, note: 'Half the shot list, fairly priced.' } });
+check('the administrator splits the milestone',
+  split.body.outcome === 'split' && split.body.net_minor === 36000 &&
+  split.body.commission_minor === 4000 && split.body.refunded_minor === 60000,
+  JSON.stringify(split.body));
+const again = await call('POST', `/admin/disputes/${d1.dispute_id}/resolve`,
+  { token: admin.token, body: { outcome: 'refund', note: 'Changing my mind.' } });
+check('a ruling is final', again.status === 409);
+
+// refund: raised by the creator this time
+const d2 = (await call('POST', `/milestones/${dm2.milestone_id}/dispute`,
+  { token: ct, body: { reason: 'Brand is demanding work outside the brief.' } })).body;
+const refunded = await call('POST', `/admin/disputes/${d2.dispute_id}/resolve`,
+  { token: admin.token, body: { outcome: 'refund', note: 'Deliverable did not match the brief.' } });
+check('the administrator refunds the brand in full',
+  refunded.body.refunded_minor === 100000 && refunded.body.net_minor === 0, JSON.stringify(refunded.body));
+
+// release: the creator is paid as if the brand had accepted
+const d3 = (await call('POST', `/milestones/${dm3.milestone_id}/dispute`,
+  { token: ct, body: { reason: 'Brand has not reviewed the final files.' } })).body;
+const release = await call('POST', `/admin/disputes/${d3.dispute_id}/resolve`,
+  { token: admin.token, body: { outcome: 'release', note: 'Files meet the brief.' } });
+check('the administrator releases to the creator', release.body.net_minor === 90000,
+  JSON.stringify(release.body));
+
+dc = (await call('GET', `/contracts/${dAward.contract_id}`, { token: ct })).body;
+check('each milestone ends in its ruled state',
+  dc.milestones.map((m) => m.status).join() === 'split,refunded,accepted',
+  dc.milestones.map((m) => m.status).join());
+check('the contract completes once every milestone is settled', dc.status === 'completed');
+check('nothing is left in escrow', dc.escrow_held_minor === 0);
+const balAfter = (await call('GET', '/creator/balance', { token: ct })).body.available_minor;
+check('the creator is credited exactly the split and release nets',
+  balAfter - balBefore === 36000 + 90000, `${balAfter - balBefore}`);
+
+const splitLedger = (await call('GET', `/milestones/${dm1.milestone_id}/ledger`)).body;
+const splitTx = splitLedger.filter((e) => e.memo !== 'funding escrow' && e.memo !== 'held for milestone');
+check('the split posts one balanced four-line transaction',
+  splitTx.length === 4 &&
+  splitTx.filter((e) => e.direction === 'debit').reduce((s, e) => s + e.amount_minor, 0) ===
+  splitTx.filter((e) => e.direction === 'credit').reduce((s, e) => s + e.amount_minor, 0));
+
 // ---------------------------------------------------------------- the books
 console.log('\nLedger\n');
 const rec = (await call('GET', '/ledger/reconcile')).body;

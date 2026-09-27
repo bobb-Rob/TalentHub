@@ -40,7 +40,7 @@ deliverable; 5–6 are explicitly de-scopable. See §1.9 of the document.
 | 2 | Creator profiles, portfolio, KYC status, audience linking | **done** |
 | 3 | Discovery, briefs, applications | **done** |
 | 4 | Contracts, milestones, escrow, deliverables, payout | **done** |
-| 5 | Reviews, messaging, notifications, disputes | not started |
+| 5 | Reviews, messaging, notifications, disputes | in progress — disputes done |
 | 6 | Admin console, reporting, accessibility, regression | not started |
 
 ## Running it
@@ -50,11 +50,12 @@ cd app
 npm install
 npm run reset     # wipes and seeds demo data
 npm run dev       # API on :4000, Vite on :5173
-npm run smoke     # 59 assertions: escrow path, accounts, brief/contract lifecycle — run after changes
+npm run smoke     # 80 assertions: escrow, accounts, briefs/contracts, disputes — run after changes
 ```
 
 Every seeded account uses the password `password123`. Sign-in has demo buttons.
 
+- `admin@talenthub.example` — the administrator; rules on disputes
 - `brand@sterling.example` — Sterling Foods, the hiring side
 - `amara@talenthub.africa` — Amara Okonkwo, motion designer, Lagos
 - plus Kwesi (Accra), Zola (Nairobi), Tunde (Ibadan), Nadia (Casablanca)
@@ -108,11 +109,13 @@ These come straight from the design chapter, and the tests enforce them.
 
 Increment 5, in order of value to the demo:
 
-1. **Disputes** — `disputed` → `refunded` / `split` already exist in the state
-   machine and schema, but there is no route or UI. This is the most visible gap.
+1. ~~**Disputes**~~ — done. Either party disputes a *submitted* milestone
+   (Figure 3.5 allows `disputed` only from `submitted`); an admin rules release,
+   refund or split through `settleEscrow()` in `server/index.js`, the one place
+   money leaves escrow.
 2. **Reviews** — two-way, published only when both sides submit or 14 days pass.
-3. **Messaging** — scoped to a contract or an open application.
-4. **Notifications** — the `events` table is already being written to; surface it.
+3. **Notifications** — the `events` table is already being written to; surface it.
+4. **Messaging** — scoped to a contract or an open application.
 
 ## Documentation
 
