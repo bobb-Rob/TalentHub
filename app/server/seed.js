@@ -10,7 +10,7 @@ const RESET = process.argv.includes('--reset');
 
 if (RESET) {
   db.pragma('foreign_keys = OFF');
-  for (const t of ['ledger_entries', 'payouts', 'deliverables', 'milestones',
+  for (const t of ['disputes', 'ledger_entries', 'payouts', 'deliverables', 'milestones',
                    'contracts', 'applications', 'briefs', 'profile_skills',
                    'portfolio_items', 'social_accounts', 'creator_profiles',
                    'brand_profiles', 'skills', 'users', 'events']) {
@@ -127,6 +127,9 @@ for (const c of creators) {
       .run(profile_id, skillIds[name], level));
 }
 
+// FR-36 — the administrator who rules on disputes.
+mkUser('admin@talenthub.example', 'admin');
+
 const brandUser = mkUser('brand@sterling.example', 'brand');
 const brand_id = id('brd');
 db.prepare(`INSERT INTO brand_profiles
@@ -174,6 +177,7 @@ console.log(`seeded ${DB_PATH}`);
 console.log('');
 console.log('  Sign in with any of these — password for all accounts is:  ' + PW);
 console.log('');
+console.log('    admin@talenthub.example     TalentHub administrator');
 console.log('    brand@sterling.example      Sterling Foods (brand)');
 for (const c of creators) console.log(`    ${c.email.padEnd(28)}${c.name} (creator)`);
 console.log('');

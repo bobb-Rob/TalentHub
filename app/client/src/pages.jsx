@@ -9,6 +9,7 @@ const DEMO = [
   ['brand@sterling.example', 'Sterling Foods', 'brand — hires creators'],
   ['amara@talenthub.africa', 'Amara Okonkwo', 'creator — motion design, Lagos'],
   ['zola@talenthub.africa', 'Zola Mthembu', 'creator — video editing, Nairobi'],
+  ['admin@talenthub.example', 'TalentHub Admin', 'administrator — rules on disputes'],
 ];
 
 // ---------------------------------------------------------------- sign in
@@ -870,6 +871,9 @@ export function ContractDetail({ contractId, user, go, refresh }) {
                 </p>
               )}
 
+              {m.dispute && <DisputeNote d={m.dispute} m={m} c={c} isBrand={isBrand} />}
+              {m.status === 'submitted' && <RaiseDispute m={m} act={act} />}
+
               <div style={{ marginTop: 12 }}>
                 <button className="quiet small"
                         onClick={() => setShowLedger({ ...showLedger,
@@ -894,6 +898,71 @@ export function ContractDetail({ contractId, user, go, refresh }) {
             Possible until a milestone is funded. After that, only a dispute can unwind it.
           </span>
         </div>
+      )}
+    </div>
+  );
+}
+
+/** FR-35 — either party can freeze a submitted milestone and hand it to an administrator. */
+function RaiseDispute({ m, act }) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState('');
+  if (!open) return (
+    <div style={{ marginTop: 10 }}>
+      <button className="quiet small" onClick={() => setOpen(true)}>Raise a dispute…</button>
+    </div>
+  );
+  return (
+    <div className="dispute-box">
+      <strong className="small">Raise a dispute</strong>
+      <p className="tiny muted" style={{ margin: '4px 0 8px' }}>
+        The milestone is frozen — nothing can be submitted, revised or accepted — and the
+        money stays in escrow until a TalentHub administrator rules. They can release it,
+        refund it, or split it. The ruling is final.
+      </p>
+      <textarea value={reason} onChange={(e) => setReason(e.target.value)}
+                placeholder="What went wrong, and what outcome you think is fair" />
+      <div className="row" style={{ marginTop: 8 }}>
+        <button className="danger" disabled={reason.trim().length < 10} onClick={() => act(
+          () => api(`/milestones/${m.milestone_id}/dispute`, { method: 'POST', body: { reason } }),
+          'Dispute raised. The milestone is frozen until an administrator rules.')}>
+          Freeze milestone and raise dispute
+        </button>
+        <button className="quiet" onClick={() => setOpen(false)}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+const OUTCOME_TEXT = {
+  release: 'released in full to the creator',
+  refund: 'refunded in full to the brand',
+  split: 'split between creator and brand',
+};
+
+function DisputeNote({ d, m, c, isBrand }) {
+  const raisedByMe = (d.raised_by_role === 'brand') === isBrand;
+  const who = raisedByMe ? 'You' : d.raised_by_role === 'brand' ? c.legal_name : c.display_name;
+  return (
+    <div className={'dispute-box' + (d.status === 'open' ? '' : ' resolved')}>
+      <div className="row" style={{ gap: 8 }}>
+        <Badge tone={d.status === 'open' ? 'red' : 'grey'}>
+          {d.status === 'open' ? 'dispute open' : 'dispute resolved'}
+        </Badge>
+        <span className="tiny muted">raised by {who} · {d.created_at}</span>
+      </div>
+      <p className="small" style={{ margin: '8px 0 0' }}>“{d.reason}”</p>
+      {d.status === 'open' ? (
+        <p className="tiny muted" style={{ margin: '8px 0 0' }}>
+          {money(m.amount_minor, c.currency_code)} is frozen in escrow until a TalentHub
+          administrator rules.
+        </p>
+      ) : (
+        <p className="small" style={{ margin: '8px 0 0' }}>
+          <strong>Ruling:</strong> {OUTCOME_TEXT[d.outcome]}
+          {d.outcome === 'split' && ` — ${money(d.creator_share_minor, c.currency_code)} to the creator (before commission), the rest to the brand`}.
+          <span className="muted"> “{d.resolution_note}”</span>
+        </p>
       )}
     </div>
   );

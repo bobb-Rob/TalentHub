@@ -190,6 +190,27 @@ CREATE TABLE IF NOT EXISTS payouts (
   created_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- FR-35/36 — a dispute freezes one submitted milestone until an administrator
+-- rules on it. The ruling's money movement is in ledger_entries; this row is
+-- the case file: who raised it, why, and how and why it was decided.
+CREATE TABLE IF NOT EXISTS disputes (
+  dispute_id          TEXT PRIMARY KEY,
+  milestone_id        TEXT NOT NULL REFERENCES milestones(milestone_id),
+  raised_by           TEXT NOT NULL REFERENCES users(user_id),
+  raised_by_role      TEXT NOT NULL CHECK (raised_by_role IN ('creator','brand')),
+  reason              TEXT NOT NULL,
+  status              TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','resolved')),
+  outcome             TEXT CHECK (outcome IN ('release','refund','split')),
+  creator_share_minor INTEGER,               -- split only: gross amount to the creator
+  resolution_note     TEXT,
+  resolved_by         TEXT REFERENCES users(user_id),
+  created_at          TEXT NOT NULL DEFAULT (datetime('now')),
+  resolved_at         TEXT
+);
+-- At most one open dispute per milestone, as a constraint rather than a check.
+CREATE UNIQUE INDEX IF NOT EXISTS ux_dispute_open
+  ON disputes (milestone_id) WHERE status = 'open';
+
 CREATE TABLE IF NOT EXISTS events (
   event_id   INTEGER PRIMARY KEY AUTOINCREMENT,
   actor      TEXT,
