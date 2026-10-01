@@ -125,6 +125,8 @@ CREATE TABLE IF NOT EXISTS contracts (
                                          'cancelled','disputed')),
   brand_accepted_at   TEXT,                  -- FR-26: both parties accept
   creator_accepted_at TEXT,
+  completed_at        TEXT,                  -- starts the 14-day review window
+
   created_at         TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -189,6 +191,54 @@ CREATE TABLE IF NOT EXISTS payouts (
   reference    TEXT,
   created_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- FR-35/36 — a dispute freezes one submitted milestone until an administrator
+-- rules on it. The ruling's money movement is in ledger_entries; this row is
+-- the case file: who raised it, why, and how and why it was decided.
+CREATE TABLE IF NOT EXISTS disputes (
+  dispute_id          TEXT PRIMARY KEY,
+  milestone_id        TEXT NOT NULL REFERENCES milestones(milestone_id),
+  raised_by           TEXT NOT NULL REFERENCES users(user_id),
+  raised_by_role      TEXT NOT NULL CHECK (raised_by_role IN ('creator','brand')),
+  reason              TEXT NOT NULL,
+  status              TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','resolved')),
+  outcome             TEXT CHECK (outcome IN ('release','refund','split')),
+  creator_share_minor INTEGER,               -- split only: gross amount to the creator
+  resolution_note     TEXT,
+  resolved_by         TEXT REFERENCES users(user_id),
+  created_at          TEXT NOT NULL DEFAULT (datetime('now')),
+  resolved_at         TEXT
+);
+-- At most one open dispute per milestone, as a constraint rather than a check.
+CREATE UNIQUE INDEX IF NOT EXISTS ux_dispute_open
+  ON disputes (milestone_id) WHERE status = 'open';
+
+-- FR-37 — each party reviews the other once per completed contract. A review
+-- is published when both sides have submitted or 14 days have passed since
+-- completion; that rule is applied on read, so nothing needs a scheduler.
+CREATE TABLE IF NOT EXISTS reviews (
+  review_id        TEXT PRIMARY KEY,
+  contract_id      TEXT NOT NULL REFERENCES contracts(contract_id),
+  reviewer_role    TEXT NOT NULL CHECK (reviewer_role IN ('creator','brand')),
+  reviewer_user_id TEXT NOT NULL REFERENCES users(user_id),
+  rating           INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
+  body             TEXT NOT NULL,
+  created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (contract_id, reviewer_role)
+);
+
+-- FR-40 — in-app notifications; email is simulated and recorded in emailed_at.
+CREATE TABLE IF NOT EXISTS notifications (
+  notification_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id         TEXT NOT NULL REFERENCES users(user_id),
+  kind            TEXT NOT NULL,
+  message         TEXT NOT NULL,
+  link            TEXT,
+  read_at         TEXT,
+  emailed_at      TEXT,
+  created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS ix_notifications_user ON notifications (user_id, notification_id);
 
 CREATE TABLE IF NOT EXISTS events (
   event_id   INTEGER PRIMARY KEY AUTOINCREMENT,

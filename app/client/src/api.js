@@ -1,6 +1,8 @@
 // Empty in development (Vite proxies /api) and when the API serves the client
 // itself; set VITE_API_URL at build time when the client is hosted separately.
-const BASE = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '') + '/api';
+// trim() also drops a byte-order mark — vite.config.js refuses to build with
+// one, and this keeps the client correct even if that check is bypassed.
+const BASE = (import.meta.env.VITE_API_URL || '').trim().replace(/\/+$/, '') + '/api';
 let token = localStorage.getItem('th_token') || null;
 
 export const getToken = () => token;
@@ -25,9 +27,9 @@ export async function api(path, { method = 'GET', body } = {}) {
   return data;
 }
 
-const SYMBOL = { NGN: '₦', GHS: 'GH₵', KES: 'KSh', ZAR: 'R', MAD: 'MAD ', USD: '$' };
-export const CURRENCIES = Object.keys(SYMBOL);
-export const symbolOf = (currency) => (SYMBOL[currency] ?? currency + ' ').trim();
+/** Everything settles in naira for now; the server refuses any other code. */
+export const CURRENCY = 'NGN';
+const SYMBOL = { NGN: '₦' };
 
 export const COUNTRIES = [
   ['NG', 'Nigeria'], ['GH', 'Ghana'], ['KE', 'Kenya'], ['ZA', 'South Africa'],
@@ -40,7 +42,7 @@ export const toMinor = (major) =>
   major === '' || major == null ? null : Math.round(Number(major) * 100);
 
 /** Money is held in minor units everywhere; it is only ever divided for display. */
-export function money(minor, currency = 'NGN') {
+export function money(minor, currency = CURRENCY) {
   if (minor == null) return '—';
   const sym = SYMBOL[currency] ?? currency + ' ';
   return sym + (minor / 100).toLocaleString(undefined, {

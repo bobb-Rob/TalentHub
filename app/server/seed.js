@@ -5,12 +5,13 @@
 import fs from 'node:fs';
 import { db, DB_PATH, id, logEvent } from './db.js';
 import { hash } from './auth.js';
+import { post, CURRENCY } from './ledger.js';
 
 const RESET = process.argv.includes('--reset');
 
 if (RESET) {
   db.pragma('foreign_keys = OFF');
-  for (const t of ['ledger_entries', 'payouts', 'deliverables', 'milestones',
+  for (const t of ['notifications', 'reviews', 'disputes', 'ledger_entries', 'payouts', 'deliverables', 'milestones',
                    'contracts', 'applications', 'briefs', 'profile_skills',
                    'portfolio_items', 'social_accounts', 'creator_profiles',
                    'brand_profiles', 'skills', 'users', 'events']) {
@@ -64,7 +65,7 @@ const creators = [
            ['Indomie festive spot', 'Director of animation'],
            ['Paystack developer series', 'Motion design']] },
   { email: 'kwesi@talenthub.africa', name: 'Kwesi Boateng', disc: 'Photography',
-    city: 'Accra', cc: 'GH', rate: 1200000, bio:
+    city: 'Accra', cc: 'GH', rate: 6000000, bio:
     'Commercial and editorial photographer. Product, lifestyle and campaign stills.',
     kyc: 'verified', modes: 'commission', langs: 'English, Twi',
     skills: [['Product photography', 'expert'], ['Editorial photography', 'advanced'],
@@ -73,7 +74,7 @@ const creators = [
     work: [['Kofi Cocoa — product range', 'Photographer'],
            ['Accra Fashion Week', 'Editorial photographer']] },
   { email: 'zola@talenthub.africa', name: 'Zola Mthembu', disc: 'Video editing',
-    city: 'Nairobi', cc: 'KE', rate: 950000, bio:
+    city: 'Nairobi', cc: 'KE', rate: 5500000, bio:
     'Long-form and short-form editor. Documentary, brand films and social cutdowns.',
     kyc: 'verified', modes: 'commission', langs: 'English, Swahili, Zulu',
     skills: [['Long-form editing', 'expert'], ['Social cutdowns', 'advanced'],
@@ -88,7 +89,7 @@ const creators = [
     social: [['instagram', '@tundedraws', 2300, 7.9, 'self_declared']],
     work: [['Children’s book series', 'Illustrator']] },
   { email: 'nadia@talenthub.africa', name: 'Nadia Cherif', disc: 'Copywriting',
-    city: 'Casablanca', cc: 'MA', rate: 700000, bio:
+    city: 'Casablanca', cc: 'MA', rate: 5000000, bio:
     'Bilingual copywriter, French and English. Brand voice, campaign lines, long-form.',
     kyc: 'verified', modes: 'commission,reach', langs: 'French, English, Arabic',
     skills: [['French copywriting', 'expert'], ['Brand voice', 'advanced'],
@@ -108,7 +109,7 @@ for (const c of creators) {
      availability, kyc_status, published_at)
     VALUES (?,?,?,?,?,?,?,?,?,?,'available',?,datetime('now'))`).run(
     profile_id, user_id, c.name, c.bio, c.cc, c.city, c.disc, c.modes,
-    c.rate, c.cc === 'NG' ? 'NGN' : c.cc === 'GH' ? 'GHS' : c.cc === 'KE' ? 'KES' : 'MAD',
+    c.rate, CURRENCY,
     c.kyc);
   c.social.forEach(([platform, handle, followers, er, src]) =>
     db.prepare(`INSERT INTO social_accounts
@@ -126,6 +127,9 @@ for (const c of creators) {
     db.prepare('INSERT INTO profile_skills (profile_id, skill_id, proficiency) VALUES (?,?,?)')
       .run(profile_id, skillIds[name], level));
 }
+
+// FR-36 — the administrator who rules on disputes.
+mkUser('admin@talenthub.example', 'admin');
 
 const brandUser = mkUser('brand@sterling.example', 'brand');
 const brand_id = id('brd');
@@ -149,8 +153,8 @@ for (const [mode, title, desc, skills, min, max] of briefs) {
   db.prepare(`INSERT INTO briefs
     (brief_id, brand_id, engagement_mode, title, description, required_skills,
      budget_min_minor, budget_max_minor, currency_code, status)
-    VALUES (?,?,?,?,?,?,?,?, 'NGN', 'published')`).run(
-    id('brf'), brand_id, mode, title, desc, skills, min, max);
+    VALUES (?,?,?,?,?,?,?,?,?, 'published')`).run(
+    id('brf'), brand_id, mode, title, desc, skills, min, max, CURRENCY);
 }
 
 // one brief already has applications waiting, so the demo opens mid-flow
@@ -168,12 +172,74 @@ db.prepare(`INSERT INTO applications
   'Happy to take the edit and the cutdowns. I have turned around similar work in two weeks.',
   36000000);
 
+// Two finished contracts, so ratings exist from the start. Each is paid through
+// the real ledger (fund, then release net of 10% commission), so the books
+// still reconcile. Kwesi's reviews are published because both sides reviewed;
+// Zola's because the brand reviewed 20 days ago and the 14-day window lapsed.
+const past = [
+  { email: 'kwesi@talenthub.africa', title: 'Spring range stills — 8 SKUs', fee: 9000000, daysAgo: 30,
+    reviews: [['brand', 5, 'Sharp, fast and easy to brief. Every shot was usable first time.'],
+              ['creator', 4, 'Clear shot list and prompt payment. Feedback came a little late.']] },
+  { email: 'zola@talenthub.africa', title: 'Founder documentary — social cutdowns', fee: 6000000, daysAgo: 20,
+    reviews: [['brand', 5, 'Turned four hours of interviews into six tight cutdowns. Would hire again.']] },
+];
+for (const job of past) {
+  const creatorId = profileIds[job.email];
+  const briefId = id('brf');
+  db.prepare(`INSERT INTO briefs (brief_id, brand_id, engagement_mode, title, description,
+      budget_min_minor, budget_max_minor, currency_code, status)
+    VALUES (?,?, 'commission', ?, 'Completed engagement.', ?, ?, ?, 'closed')`)
+    .run(briefId, brand_id, job.title, job.fee, job.fee, CURRENCY);
+  db.prepare(`INSERT INTO applications (application_id, brief_id, creator_id, cover_note,
+      proposed_fee_minor, status) VALUES (?,?,?, '', ?, 'awarded')`)
+    .run(id('app'), briefId, creatorId, job.fee);
+  const contractId = id('ctr');
+  const ago = `-${job.daysAgo} days`;
+  db.prepare(`INSERT INTO contracts (contract_id, brief_id, creator_id, brand_id, agreed_fee_minor,
+      commission_rate, currency_code, status, brand_accepted_at, creator_accepted_at,
+      created_at, completed_at)
+    VALUES (?,?,?,?,?, 0.10, ?, 'completed', datetime('now', ?, '-10 days'),
+      datetime('now', ?, '-9 days'), datetime('now', ?, '-10 days'), datetime('now', ?))`)
+    .run(contractId, briefId, creatorId, brand_id, job.fee, CURRENCY, ago, ago, ago, ago);
+  const milestoneId = id('mst');
+  db.prepare(`INSERT INTO milestones (milestone_id, contract_id, sequence_no, description,
+      amount_minor, status, funded_at, submitted_at, accepted_at)
+    VALUES (?,?, 1, 'Full delivery', ?, 'accepted', datetime('now', ?, '-8 days'),
+      datetime('now', ?, '-1 days'), datetime('now', ?))`)
+    .run(milestoneId, contractId, job.fee, ago, ago, ago);
+  post([
+    { account_type: 'brand_funding', account_owner_id: brand_id, direction: 'debit',
+      amount_minor: job.fee, memo: 'funding escrow' },
+    { account_type: 'escrow', account_owner_id: contractId, direction: 'credit',
+      amount_minor: job.fee, memo: 'held for milestone' },
+  ], { idempotencyKey: `fund:${milestoneId}`, milestoneId });
+  const commission = Math.round(job.fee * 0.10);
+  post([
+    { account_type: 'escrow', account_owner_id: contractId, direction: 'debit',
+      amount_minor: job.fee, memo: 'released on acceptance' },
+    { account_type: 'creator_payable', account_owner_id: creatorId, direction: 'credit',
+      amount_minor: job.fee - commission, memo: 'net of commission' },
+    { account_type: 'platform_commission', direction: 'credit',
+      amount_minor: commission, memo: 'platform commission' },
+  ], { idempotencyKey: `release:${milestoneId}`, milestoneId });
+  db.prepare('UPDATE creator_profiles SET completed_contracts = completed_contracts + 1 WHERE profile_id = ?')
+    .run(creatorId);
+  for (const [role, rating, body] of job.reviews) {
+    const reviewer = role === 'brand' ? brandUser
+      : db.prepare('SELECT user_id FROM creator_profiles WHERE profile_id = ?').get(creatorId).user_id;
+    db.prepare(`INSERT INTO reviews (review_id, contract_id, reviewer_role, reviewer_user_id,
+        rating, body, created_at) VALUES (?,?,?,?,?,?, datetime('now', ?, '+1 days'))`)
+      .run(id('rev'), contractId, role, reviewer, rating, body, ago);
+  }
+}
+
 logEvent(null, null, 'demo.seeded', `${creators.length} creators, ${briefs.length} briefs`);
 
 console.log(`seeded ${DB_PATH}`);
 console.log('');
 console.log('  Sign in with any of these — password for all accounts is:  ' + PW);
 console.log('');
+console.log('    admin@talenthub.example     TalentHub administrator');
 console.log('    brand@sterling.example      Sterling Foods (brand)');
 for (const c of creators) console.log(`    ${c.email.padEnd(28)}${c.name} (creator)`);
 console.log('');

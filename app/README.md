@@ -54,10 +54,12 @@ screen. Every seeded account uses the password `password123`.
 npm run smoke
 ```
 
-59 assertions against a running API, in three parts: the escrow path itself,
+103 assertions against a running API: the escrow path itself,
 accounts and profiles (sign-up, profile, skills, portfolio, audience, ID check),
-and the brief and contract lifecycle (drafts, shortlisting, contract acceptance,
-cancellation). They include the cases that should fail: applying twice to one
+the brief and contract lifecycle (drafts, shortlisting, contract acceptance,
+cancellation), disputes (every ruling, and the ledger behind each), reviews
+(including the sealing and 14-day rules) and notifications. They
+include the cases that should fail: applying twice to one
 brief, funding before the creator accepts, submitting against an unfunded
 milestone, a creator accepting their own work, funding the same milestone twice,
 one brand touching another brand's applications, cancelling once money is in
@@ -66,41 +68,58 @@ every transaction in the ledger balances.
 
 ## Deploy
 
-Two routes, both in the repository:
+The test environment deploys automatically from the **`staging`** branch:
 
-- **Render** — `render.yaml` at the repository root. Point Render at the repo
-  and it builds the client and serves it from the same Node process as the API.
-  On the free plan there is no persistent disk, so the database is recreated and
-  reseeded on each deploy; fine for a demo.
-- **Container** — `Dockerfile` here. Works on Railway, Fly.io or Cloud Run.
-  Mount a volume at `/data` to keep the database.
+| Part | Host | Config | URL |
+|---|---|---|---|
+| Client | Vercel, project root `app` | `vercel.json` | https://talenthub-taupe.vercel.app |
+| API + SQLite | Render, Frankfurt, free plan | `render.yaml` | https://talenthub-api-ih7b.onrender.com |
 
-In production the API serves the built client, so it is one service, not two.
+The client is built with `VITE_API_URL` pointing at the API, and the API only
+accepts browser requests from the origins in `CORS_ORIGIN`. On the free plan
+there is no persistent disk, so the database is recreated and reseeded on each
+deploy or wake; the first request after 15 idle minutes takes about 50 seconds.
+
+There is no production environment yet. `main` deploys nowhere; when the
+platform goes live, a production environment will deploy from `main`.
+
+For a single-service alternative, `Dockerfile` here builds the client and serves
+it from the API process — it works on Railway, Fly.io or Cloud Run. Mount a
+volume at `/data` to keep the database.
 
 ## API
 
+Every route checks the caller's role and ownership on the server.
+
 | Method | Path | Notes |
 |---|---|---|
-| POST | `/api/auth/register` · `/api/auth/login` | bcrypt cost 12, JWT |
+| POST | `/api/auth/register` · `/api/auth/login` | bcrypt cost 12, JWT; lockout after 5 failures |
 | GET | `/api/me` | current user and profile |
 | PUT | `/api/creator/profile` · `/api/brand/profile` | create or update |
-| POST | `/api/creator/portfolio` · `/api/creator/social` · `/api/creator/kyc` | |
-| GET | `/api/creators` | search: `q`, `discipline`, `country`, `mode`, `verified`, `maxRate` |
-| GET | `/api/creators/:id` | full profile |
-| GET · POST | `/api/briefs` | list or publish |
-| GET | `/api/briefs/:id` | brief with applications |
+| GET · PUT | `/api/skills` · `/api/creator/skills` | taxonomy; replace a creator's skills |
+| POST · DELETE | `/api/creator/portfolio` · `/api/creator/portfolio/:id` | at most 20 items |
+| POST | `/api/creator/social` · `/api/creator/kyc` | typed-in figures are self-declared; KYC simulated |
+| GET | `/api/creators` · `/api/creators/:id` | search: `q`, `discipline`, `country`, `mode`, `verified`, `maxRate` |
+| GET · POST | `/api/briefs` | list, or create as draft or published |
+| GET | `/api/briefs/:id` | applications visible only to the owning brand |
+| POST | `/api/briefs/:id/status` | draft → published → closed |
 | POST | `/api/briefs/:id/apply` | one per creator per brief |
-| POST | `/api/applications/:id/award` | creates the contract and milestones |
+| POST | `/api/applications/:id/status` · `/award` | shortlist, reject, award |
 | GET | `/api/contracts` · `/api/contracts/:id` | scoped to the signed-in party |
-| POST | `/api/milestones/:id/fund` | escrow posting |
-| POST | `/api/milestones/:id/submit` | requires a funded milestone |
-| POST | `/api/milestones/:id/revise` | capped at two |
-| POST | `/api/milestones/:id/accept` | release, net of commission |
+| POST | `/api/contracts/:id/accept` · `/cancel` | creator accepts; either cancels before funding |
+| POST | `/api/milestones/:id/fund` | escrow posting; contract must be accepted |
+| POST | `/api/milestones/:id/submit` · `/revise` · `/accept` | revisions capped at two |
+| POST | `/api/milestones/:id/dispute` | submitted milestones only; freezes it |
+| GET | `/api/admin/disputes` | admin: the queue, with deliverables |
+| POST | `/api/admin/disputes/:id/resolve` | admin: release, refund or split, with a reason |
+| POST | `/api/contracts/:id/review` | once per party, within 14 days of completion |
+| GET · POST | `/api/notifications` · `/api/notifications/read` | your inbox; mark one or all read |
 | GET | `/api/creator/balance` · POST `/api/payouts` | withdrawal |
 | GET | `/api/ledger` · `/api/ledger/reconcile` | the audit view |
 
 ## Not built yet
 
-Disputes, reviews, messaging and notifications are Increment 5. The `disputed`,
-`refunded` and `split` states already exist in the schema and the state machine;
-they have no routes or interface yet.
+Messaging (the last of Increment 5) and the rest of the admin console
+(Increment 6). Notification emails are simulated. Portfolio items have no file upload yet, KYC
+and payments are simulated, and audience figures are not fetched from the
+platforms.
