@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { api, titleCase, COUNTRIES, CURRENCIES, symbolOf, toMinor } from './api.js';
-import { Badge, Banner, Empty, Field, KycBadge, MetricBadge } from './components/ui.jsx';
+import { api, titleCase, COUNTRIES, CURRENCY, toMinor } from './api.js';
+import {
+  Badge, Banner, Button, Card, Empty, Field, KycBadge, MetricBadge, PageHeader, SectionLabel,
+} from './components/ui.jsx';
 
 const PROFICIENCY = ['beginner', 'intermediate', 'advanced', 'expert'];
 const PLATFORMS = ['instagram', 'tiktok', 'youtube', 'x', 'linkedin'];
@@ -41,18 +43,13 @@ export function CreatorProfile({ user, onSaved, go }) {
 
   return (
     <div className="page">
-      <div className="page-head">
-        <div>
-          <h1>{p ? 'Your profile' : 'Set up your profile'}</h1>
-          <p>{p
-            ? 'What brands see when they find you. Portfolio and audience sit side by side.'
-            : 'Brands can find you once this is saved. You can add work and audience figures next.'}</p>
-        </div>
-        <div className="spacer" />
-        {p && <button className="ghost" onClick={() => go(`/creators/${p.profile_id}`)}>
-          View public profile
-        </button>}
-      </div>
+      <PageHeader eyebrow="Creator" title={p ? 'Your profile' : 'Set up your profile'}
+                  lede={p
+                    ? 'What brands see when they find you. Portfolio and audience sit side by side.'
+                    : 'Brands can find you once this is saved. You can add work and audience figures next.'}
+                  actions={p && <Button variant="outline" onClick={() => go(`/creators/${p.profile_id}`)}>
+                    View public profile
+                  </Button>} />
 
       <CreatorDetails profile={p} disciplines={disciplines} onSaved={onSaved} />
 
@@ -78,7 +75,6 @@ function CreatorDetails({ profile: p, disciplines, onSaved }) {
     languages: p?.languages || '',
     modes: (p?.engagement_modes || 'commission').split(','),
     day_rate: p?.day_rate_minor != null ? String(p.day_rate_minor / 100) : '',
-    currency_code: p?.currency_code || 'NGN',
     availability: p?.availability || 'available',
   }));
   const [state, run] = useAction();
@@ -94,7 +90,7 @@ function CreatorDetails({ profile: p, disciplines, onSaved }) {
         country_code: f.country_code, city: f.city,
         primary_discipline: f.primary_discipline, languages: f.languages,
         engagement_modes: f.modes, day_rate_minor: toMinor(f.day_rate),
-        currency_code: f.currency_code, availability: f.availability,
+        currency_code: CURRENCY, availability: f.availability,
       } });
       await onSaved();
     }, p ? 'Profile saved.' : 'Profile published. Now add your work and audience below.');
@@ -103,7 +99,7 @@ function CreatorDetails({ profile: p, disciplines, onSaved }) {
   const allDisciplines = [...new Set([...disciplines, f.primary_discipline])];
 
   return (
-    <div className="card">
+    <Card>
       <h3>About you</h3>
       <Feedback state={state} />
       <form onSubmit={save}>
@@ -146,13 +142,8 @@ function CreatorDetails({ profile: p, disciplines, onSaved }) {
           </div>
         </Field>
         <div className="field-row">
-          <Field label={`Day rate (${symbolOf(f.currency_code)})`}>
-            <div className="row" style={{ flexWrap: 'nowrap', gap: 6 }}>
-              <input type="number" min="0" step="1" value={f.day_rate} onChange={set('day_rate')} />
-              <select value={f.currency_code} onChange={set('currency_code')} style={{ width: 96 }}>
-                {CURRENCIES.map((c) => <option key={c}>{c}</option>)}
-              </select>
-            </div>
+          <Field label="Day rate (₦)" hint="Brands pay and you are paid in naira.">
+            <input type="number" min="0" step="1" value={f.day_rate} onChange={set('day_rate')} />
           </Field>
           <Field label="Availability">
             <select value={f.availability} onChange={set('availability')}>
@@ -162,9 +153,9 @@ function CreatorDetails({ profile: p, disciplines, onSaved }) {
             </select>
           </Field>
         </div>
-        <button disabled={state.busy}>{p ? 'Save profile' : 'Publish profile'}</button>
+        <Button variant="accent" disabled={state.busy}>{p ? 'Save profile' : 'Publish profile'}</Button>
       </form>
-    </div>
+    </Card>
   );
 }
 
@@ -173,8 +164,8 @@ function Verification({ profile, onSaved }) {
   const [state, run] = useAction();
   return (
     <>
-      <div className="section-label">Identity verification</div>
-      <div className="card">
+      <SectionLabel>Identity verification</SectionLabel>
+      <Card>
         <Feedback state={state} />
         <div className="row">
           <KycBadge status={profile.kyc_status} />
@@ -184,12 +175,12 @@ function Verification({ profile, onSaved }) {
               : 'Verified creators rank higher in search and can be paid out.'}
           </span>
           {profile.kyc_status !== 'verified' && (
-            <button className="ghost" disabled={state.busy} onClick={() => run(async () => {
+            <Button variant="outline" disabled={state.busy} onClick={() => run(async () => {
               await api('/creator/kyc', { method: 'POST' });
               await onSaved();
             }, 'Identity verified.')}>
               Submit ID for verification
-            </button>
+            </Button>
           )}
         </div>
         {profile.kyc_status !== 'verified' && (
@@ -197,7 +188,7 @@ function Verification({ profile, onSaved }) {
             Demo: no ID provider is called, so the check passes straight away.
           </p>
         )}
-      </div>
+      </Card>
     </>
   );
 }
@@ -227,8 +218,8 @@ function Skills({ taxonomy, current, onSaved }) {
 
   return (
     <>
-      <div className="section-label">Skills</div>
-      <div className="card">
+      <SectionLabel count={Object.keys(picked).length}>Skills</SectionLabel>
+      <Card>
         <Feedback state={state} />
         <div className="grid three">
           {Object.entries(byDiscipline).map(([discipline, skills]) => (
@@ -252,8 +243,8 @@ function Skills({ taxonomy, current, onSaved }) {
             </div>
           ))}
         </div>
-        <button style={{ marginTop: 12 }} disabled={state.busy} onClick={save}>Save skills</button>
-      </div>
+        <Button style={{ marginTop: 14 }} disabled={state.busy} onClick={save}>Save skills</Button>
+      </Card>
     </>
   );
 }
@@ -281,8 +272,8 @@ function Portfolio({ items, onChanged }) {
 
   return (
     <>
-      <div className="section-label">Portfolio ({items.length} of 20)</div>
-      <div className="card">
+      <SectionLabel count={`${items.length} of 20`}>Portfolio</SectionLabel>
+      <Card>
         <Feedback state={state} />
         {items.length ? (
           <table>
@@ -295,7 +286,7 @@ function Portfolio({ items, onChanged }) {
                   <td className="small">{it.media_type}</td>
                   <td className="small muted">{it.role_played}</td>
                   <td className="num">
-                    <button className="quiet small" onClick={() => remove(it)}>Remove</button>
+                    <Button variant="quiet" size="sm" onClick={() => remove(it)}>Remove</Button>
                   </td>
                 </tr>
               ))}
@@ -327,10 +318,10 @@ function Portfolio({ items, onChanged }) {
                 <input value={f.description} onChange={set('description')} />
               </Field>
             </div>
-            <button className="ghost" disabled={state.busy}>+ Add to portfolio</button>
+            <Button variant="outline" disabled={state.busy}>+ Add to portfolio</Button>
           </form>
         )}
-      </div>
+      </Card>
     </>
   );
 }
@@ -358,8 +349,8 @@ function Audience({ accounts, onChanged }) {
 
   return (
     <>
-      <div className="section-label">Audience</div>
-      <div className="card">
+      <SectionLabel count={accounts.length}>Audience</SectionLabel>
+      <Card>
         <Feedback state={state} />
         {accounts.length ? (
           <table>
@@ -402,9 +393,9 @@ function Audience({ accounts, onChanged }) {
             Figures you type in are shown to brands as <Badge tone="amber">self-declared</Badge>.
             Only a figure fetched from the platform itself is shown as verified.
           </p>
-          <button className="ghost" disabled={state.busy}>Save account</button>
+          <Button variant="outline" disabled={state.busy}>Save account</Button>
         </form>
-      </div>
+      </Card>
     </>
   );
 }
@@ -429,13 +420,9 @@ export function BrandProfile({ user, onSaved }) {
 
   return (
     <div className="page">
-      <div className="page-head">
-        <div>
-          <h1>{p ? 'Organisation profile' : 'Set up your organisation'}</h1>
-          <p>Creators see this on every brief you publish.</p>
-        </div>
-      </div>
-      <div className="card">
+      <PageHeader eyebrow="Brand" title={p ? 'Organisation profile' : 'Set up your organisation'}
+                  lede="Creators see this on every brief you publish." />
+      <Card>
         <Feedback state={state} />
         <form onSubmit={save}>
           <div className="field-row">
@@ -462,9 +449,9 @@ export function BrandProfile({ user, onSaved }) {
             <input type="url" value={f.website} onChange={set('website')}
                    placeholder="https://example.com" />
           </Field>
-          <button disabled={state.busy}>{p ? 'Save' : 'Save and continue'}</button>
+          <Button variant="accent" disabled={state.busy}>{p ? 'Save' : 'Save and continue'}</Button>
         </form>
-      </div>
+      </Card>
     </div>
   );
 }

@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { api, money, titleCase, COUNTRIES, toMinor } from './api.js';
 import {
-  Avatar, AvailabilityBadge, Badge, Banner, Empty, Field, Flow, KycBadge, LedgerTable,
-  MetricBadge, MilestoneBadge, Stat,
+  Avatar, AvailabilityBadge, Badge, Banner, Button, Card, Empty, Field, Figure, Flow, Icon,
+  KycBadge, LedgerTable, MetricBadge, MilestoneBadge, PageHeader, Rating, SectionLabel,
+  StarInput, Stat, Wordmark, BackLink,
 } from './components/ui.jsx';
 
 const DEMO = [
@@ -39,55 +40,73 @@ export function SignIn({ onSignedIn }) {
   };
 
   return (
-    <div className="signin">
-      <div style={{ textAlign: 'center', marginBottom: 20 }}>
-        <h1 style={{ color: 'var(--navy)', marginBottom: 2 }}>TalentHub</h1>
-        <p className="muted small">
-          Creator–brand marketplace for the African digital creator economy
-        </p>
-      </div>
-      <div className="tabs">
-        <button type="button" className={mode === 'signin' ? 'on' : ''}
-                onClick={() => switchTo('signin')}>Sign in</button>
-        <button type="button" className={mode === 'register' ? 'on' : ''}
-                onClick={() => switchTo('register')}>Create account</button>
-      </div>
-      {mode === 'register'
-        ? <Register onSignedIn={onSignedIn} />
-        : <div className="card">
-        <Banner tone="err">{err}</Banner>
-        <form onSubmit={submit}>
-          <Field label="Email">
-            <input value={email} onChange={(e) => setEmail(e.target.value)}
-                   autoComplete="username" />
-          </Field>
-          <Field label="Password">
-            <input type="password" value={password}
-                   onChange={(e) => setPassword(e.target.value)}
-                   autoComplete="current-password" />
-          </Field>
-          <button disabled={busy} style={{ width: '100%' }}>
-            {busy ? 'Signing in…' : 'Sign in'}
-          </button>
-        </form>
-
-        <div className="section-label">Or sign in as a demo account</div>
-        <div className="demo-list">
-          {DEMO.map(([mail, name, note]) => (
-            <button key={mail} type="button" disabled={busy}
-                    onClick={(e) => submit(e, mail)}>
-              <Avatar name={name} />
-              <span>
-                <strong>{name}</strong>
-                <br /><span className="tiny muted">{note}</span>
-              </span>
-            </button>
-          ))}
+    <div className="auth">
+      <div className="topbar-in"><Wordmark /></div>
+      <div className="auth-grid">
+        <div>
+          <div className="eyebrow">Creator–brand marketplace · Africa</div>
+          <h1 className="display">Hire the <span className="accent">makers.</span></h1>
+          <hr className="auth-rule" />
+          <h2>
+            Commission Africa’s creators for their craft or their reach,
+            with <span className="gradient-text">every fee held in escrow</span>.
+          </h2>
+          <p className="auth-lede">
+            One verified profile carries a portfolio and authenticated audience figures.
+            Brands engage a creator either way, under one contract, one escrow and one payout.
+          </p>
+          <ul className="points">
+            <li><Icon name="shield" /> Verified audience figures are never shown as self-declared ones.</li>
+            <li><Icon name="lock" /> Each milestone is funded into escrow before work begins.</li>
+            <li><Icon name="star" /> Both sides review each other once the contract completes.</li>
+          </ul>
         </div>
-        <p className="tiny muted" style={{ marginTop: 12, marginBottom: 0 }}>
-          Every seeded account uses the password <code>password123</code>.
-        </p>
-      </div>}
+
+        <div className="auth-panel">
+          <div className="tabs">
+            <button type="button" className={mode === 'signin' ? 'on' : ''}
+                    onClick={() => switchTo('signin')}>Sign in</button>
+            <button type="button" className={mode === 'register' ? 'on' : ''}
+                    onClick={() => switchTo('register')}>Create account</button>
+          </div>
+          {mode === 'register'
+            ? <Register onSignedIn={onSignedIn} />
+            : <Card>
+            <Banner tone="err">{err}</Banner>
+            <form onSubmit={submit}>
+              <Field label="Email">
+                <input value={email} onChange={(e) => setEmail(e.target.value)}
+                       autoComplete="username" />
+              </Field>
+              <Field label="Password">
+                <input type="password" value={password}
+                       onChange={(e) => setPassword(e.target.value)}
+                       autoComplete="current-password" />
+              </Field>
+              <Button variant="accent" size="lg" block disabled={busy}>
+                {busy ? 'Signing in…' : 'Sign in'}
+              </Button>
+            </form>
+
+            <SectionLabel>Or try a demo account</SectionLabel>
+            <div className="demo-list">
+              {DEMO.map(([mail, name, note]) => (
+                <button key={mail} type="button" disabled={busy}
+                        onClick={(e) => submit(e, mail)}>
+                  <Avatar name={name} />
+                  <span>
+                    <strong>{name}</strong>
+                    <br /><span className="tiny muted">{note}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </Card>}
+          <p className="auth-foot">
+            Every seeded account uses the password <code>password123</code>.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
@@ -107,7 +126,7 @@ function Register({ onSignedIn }) {
   };
 
   return (
-    <div className="card">
+    <Card>
       <Banner tone="err">{err}</Banner>
       <form onSubmit={submit}>
         <Field label="I am joining as">
@@ -132,11 +151,11 @@ function Register({ onSignedIn }) {
                  autoComplete="new-password"
                  onChange={(e) => setF({ ...f, password: e.target.value })} />
         </Field>
-        <button disabled={busy} style={{ width: '100%' }}>
+        <Button variant="accent" size="lg" block disabled={busy}>
           {busy ? 'Creating account…' : 'Create account'}
-        </button>
+        </Button>
       </form>
-    </div>
+    </Card>
   );
 }
 
@@ -159,70 +178,64 @@ export function Discover({ go }) {
 
   return (
     <div className="page">
-      <div className="page-head">
-        <div>
-          <h1>Find a creator</h1>
-          <p>Verified profiles carrying both portfolio work and audience figures.</p>
-        </div>
-      </div>
+      <PageHeader eyebrow="Discover" title="Find a creator"
+                  lede="Verified profiles carrying both portfolio work and audience figures." />
 
-      <div className="card">
-        <div className="row">
-          <div style={{ flex: 2, minWidth: 200 }}>
-            <input placeholder="Search name or biography…" value={f.q}
-                   onChange={(e) => setF({ ...f, q: e.target.value })} />
-          </div>
-          <div style={{ flex: 1, minWidth: 150 }}>
-            <select value={f.discipline}
-                    onChange={(e) => setF({ ...f, discipline: e.target.value })}>
-              <option value="">Any discipline</option>
-              {disciplines.map((d) => <option key={d}>{d}</option>)}
-            </select>
-          </div>
-          <div style={{ flex: 1, minWidth: 120 }}>
-            <select value={f.country}
-                    onChange={(e) => setF({ ...f, country: e.target.value })}>
-              <option value="">Any country</option>
-              {COUNTRIES.map(([code, name]) => <option key={code} value={code}>{name}</option>)}
-            </select>
-          </div>
-          <label className="row small" style={{ gap: 6, marginBottom: 0 }}>
-            <input type="checkbox" style={{ width: 'auto' }} checked={f.verified}
+      <Card>
+        <div className="filters">
+          <input placeholder="Search name or biography…" value={f.q}
+                 onChange={(e) => setF({ ...f, q: e.target.value })} />
+          <select value={f.discipline}
+                  onChange={(e) => setF({ ...f, discipline: e.target.value })}>
+            <option value="">Any discipline</option>
+            {disciplines.map((d) => <option key={d}>{d}</option>)}
+          </select>
+          <select value={f.country}
+                  onChange={(e) => setF({ ...f, country: e.target.value })}>
+            <option value="">Any country</option>
+            {COUNTRIES.map(([code, name]) => <option key={code} value={code}>{name}</option>)}
+          </select>
+          <label className="check">
+            <input type="checkbox" checked={f.verified}
                    onChange={(e) => setF({ ...f, verified: e.target.checked })} />
             ID verified only
           </label>
         </div>
-      </div>
+      </Card>
 
-      <div className="section-label">{rows.length} creators</div>
+      <SectionLabel count={rows.length}>Creators</SectionLabel>
       <div className="grid two">
         {rows.map((c) => (
-          <div key={c.profile_id} className="card clickable"
-               onClick={() => go(`/creators/${c.profile_id}`)}>
+          <Card key={c.profile_id} className="creator-card"
+                onClick={() => go(`/creators/${c.profile_id}`)}>
             <div className="row" style={{ alignItems: 'flex-start', flexWrap: 'nowrap' }}>
               <Avatar name={c.display_name} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <strong>{c.display_name}</strong>
+                <h3>{c.display_name}</h3>
                 <div className="small muted">
                   {c.primary_discipline} · {c.city}, {c.country_code}
                 </div>
-                <div className="row" style={{ gap: 6, marginTop: 6 }}>
-                  <KycBadge status={c.kyc_status} />
-                  {c.social.slice(0, 2).map((s) => (
-                    <span key={s.platform} className="row tiny" style={{ gap: 4 }}>
-                      <strong>{(s.follower_count / 1000).toFixed(1)}k</strong>
-                      <MetricBadge source={s.metrics_source} />
-                    </span>
-                  ))}
-                </div>
-                <div className="small" style={{ marginTop: 8 }}>
-                  {money(c.day_rate_minor, c.currency_code)} / day
-                  {c.completed_contracts > 0 &&
-                    <span className="muted"> · {c.completed_contracts} completed</span>}
-                </div>
               </div>
+              <KycBadge status={c.kyc_status} />
             </div>
-          </div>
+            <div className="row" style={{ gap: 14 }}>
+              {c.social.slice(0, 2).map((s) => (
+                <span key={s.platform} className="row small" style={{ gap: 6 }}>
+                  <strong>{(s.follower_count / 1000).toFixed(1)}k</strong>
+                  <span className="muted">{titleCase(s.platform)}</span>
+                  <MetricBadge source={s.metrics_source} />
+                </span>
+              ))}
+            </div>
+            <div className="foot">
+              <div>
+                <Rating mean={c.mean_rating} count={c.review_count} compact />
+                {c.completed_contracts > 0 &&
+                  <span className="tiny muted"> · {c.completed_contracts} completed</span>}
+              </div>
+              <Figure size="sm" value={money(c.day_rate_minor, c.currency_code)} caption="per day" />
+            </div>
+          </Card>
         ))}
         {!rows.length && <Empty>No creators match those filters.</Empty>}
       </div>
@@ -236,12 +249,12 @@ export function CreatorDetail({ profileId, go }) {
   if (!c) return <div className="page"><Empty>Loading…</Empty></div>;
   return (
     <div className="page">
-      <button className="quiet small" onClick={() => go('/discover')}>← Back to search</button>
-      <div className="card" style={{ marginTop: 12 }}>
+      <BackLink onClick={() => go('/discover')}>Back to search</BackLink>
+      <Card className="lead">
         <div className="row" style={{ alignItems: 'flex-start', flexWrap: 'nowrap' }}>
           <Avatar name={c.display_name} lg />
           <div style={{ flex: 1 }}>
-            <h2 style={{ marginBottom: 2 }}>{c.display_name}</h2>
+            <h1 style={{ marginBottom: 2 }}>{c.display_name}</h1>
             <div className="muted small">
               {c.primary_discipline} · {c.city}, {c.country_code}
             </div>
@@ -256,19 +269,17 @@ export function CreatorDetail({ profileId, go }) {
               Speaks {c.languages}
             </div>}
           </div>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 20, fontWeight: 700 }}>
-              {money(c.day_rate_minor, c.currency_code)}
-            </div>
-            <div className="tiny muted">per day</div>
-          </div>
+          <Figure size="lg" value={money(c.day_rate_minor, c.currency_code)} caption="per day">
+            <div style={{ marginTop: 8 }}><Rating mean={c.mean_rating} count={c.review_count} /></div>
+            <div className="tiny muted">{c.completed_contracts} completed contract{c.completed_contracts === 1 ? '' : 's'}</div>
+          </Figure>
         </div>
-        <p className="small" style={{ marginTop: 14, marginBottom: 0 }}>{c.biography}</p>
-      </div>
+        <p style={{ marginTop: 16, marginBottom: 0 }}>{c.biography}</p>
+      </Card>
 
       {c.skills?.length > 0 && (
         <>
-          <div className="section-label">Skills</div>
+          <SectionLabel>Skills</SectionLabel>
           <div className="row" style={{ gap: 6 }}>
             {c.skills.map((s) => (
               <Badge key={s.skill_id} tone="grey">{s.name} · {s.proficiency}</Badge>
@@ -277,20 +288,22 @@ export function CreatorDetail({ profileId, go }) {
         </>
       )}
 
-      <div className="section-label">Portfolio</div>
+      <ReviewList title="Reviews from brands" reviews={c.reviews} />
+
+      <SectionLabel count={c.portfolio.length}>Portfolio</SectionLabel>
       <div className="grid three">
         {c.portfolio.map((p) => (
-          <div key={p.item_id} className="card">
-            <div className="thumb" style={{ marginBottom: 8 }}>{p.media_type}</div>
-            <strong className="small">{p.title}</strong>
-            <div className="tiny muted">{p.role_played}</div>
-          </div>
+          <Card key={p.item_id}>
+            <div className="thumb" style={{ marginBottom: 10 }}>{p.media_type}</div>
+            <strong>{p.title}</strong>
+            <div className="small muted">{p.role_played}</div>
+          </Card>
         ))}
         {!c.portfolio.length && <Empty>No portfolio items yet.</Empty>}
       </div>
 
-      <div className="section-label">Audience</div>
-      <div className="card">
+      <SectionLabel>Audience</SectionLabel>
+      <Card>
         <table>
           <thead>
             <tr><th>Platform</th><th>Handle</th><th className="num">Followers</th>
@@ -309,7 +322,7 @@ export function CreatorDetail({ profileId, go }) {
           </tbody>
         </table>
         {!c.social.length && <p className="small muted">No linked accounts.</p>}
-      </div>
+      </Card>
     </div>
   );
 }
@@ -350,22 +363,19 @@ export function Briefs({ user, go }) {
 
   return (
     <div className="page">
-      <div className="page-head">
-        <div>
-          <h1>{isBrand ? 'Your briefs' : 'Open briefs'}</h1>
-          <p>{isBrand ? 'Work you have put out to the market.'
-                      : 'Work brands are looking to commission.'}</p>
-        </div>
-        <div className="spacer" />
-        {isBrand && <button onClick={() => setOpen(!open)}>
-          {open ? 'Cancel' : '+ New brief'}
-        </button>}
-      </div>
+      <PageHeader eyebrow={isBrand ? 'Hiring' : 'Find work'}
+                  title={isBrand ? 'Your briefs' : 'Open briefs'}
+                  lede={isBrand ? 'Work you have put out to the market.'
+                                : 'Work brands are looking to commission.'}
+                  actions={isBrand && <Button variant={open ? 'outline' : 'accent'}
+                                              onClick={() => setOpen(!open)}>
+                    {open ? 'Cancel' : '+ New brief'}
+                  </Button>} />
 
       <Banner tone="err">{err}</Banner>
 
       {open && (
-        <div className="card" style={{ marginBottom: 14 }}>
+        <Card style={{ marginBottom: 14 }}>
           <form onSubmit={create}>
             <Field label="Title">
               <input required value={form.title}
@@ -395,20 +405,20 @@ export function Briefs({ user, go }) {
               </Field>
             </div>
             <div className="row">
-              <button value="published">Publish brief</button>
-              <button value="draft" className="ghost">Save as draft</button>
+              <Button variant="accent" value="published">Publish brief</Button>
+              <Button variant="outline" value="draft">Save as draft</Button>
             </div>
           </form>
-        </div>
+        </Card>
       )}
 
       <div className="stack">
         {rows.map((b) => (
-          <div key={b.brief_id} className="card clickable" onClick={() => go(`/briefs/${b.brief_id}`)}>
+          <Card key={b.brief_id} onClick={() => go(`/briefs/${b.brief_id}`)}>
             <div className="row" style={{ alignItems: 'flex-start' }}>
               <div style={{ flex: 1 }}>
                 <div className="row" style={{ gap: 8 }}>
-                  <strong>{b.title}</strong>
+                  <h3 style={{ margin: 0 }}>{b.title}</h3>
                   <Badge tone={b.engagement_mode === 'reach' ? 'navy' : 'grey'}>
                     {b.engagement_mode === 'reach' ? 'reach' : 'commission'}
                   </Badge>
@@ -419,14 +429,11 @@ export function Briefs({ user, go }) {
                   {b.description.slice(0, 150)}{b.description.length > 150 ? '…' : ''}
                 </p>
               </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontWeight: 700 }}>
-                  {money(b.budget_min_minor, b.currency_code)}–{money(b.budget_max_minor, b.currency_code)}
-                </div>
-                <div className="tiny muted">{b.application_count} application{b.application_count === 1 ? '' : 's'}</div>
-              </div>
+              <Figure size="sm"
+                      value={`${money(b.budget_min_minor, b.currency_code)}–${money(b.budget_max_minor, b.currency_code)}`}
+                      caption={`${b.application_count} application${b.application_count === 1 ? '' : 's'}`} />
             </div>
-          </div>
+          </Card>
         ))}
         {!rows.length && <Empty>
           {isBrand ? 'You have not published a brief yet.' : 'No open briefs right now.'}
@@ -482,28 +489,32 @@ export function BriefDetail({ briefId, user, go, refresh }) {
 
   return (
     <div className="page">
-      <button className="quiet small" onClick={() => go('/briefs')}>← Back to briefs</button>
+      <BackLink onClick={() => go('/briefs')}>Back to briefs</BackLink>
       <Banner tone="err">{err}</Banner>
 
-      <div className="card" style={{ marginTop: 12 }}>
-        <div className="row" style={{ gap: 8 }}>
-          <h2 style={{ margin: 0 }}>{b.title}</h2>
+      <Card className="lead">
+        <div className="row" style={{ gap: 10 }}>
+          <h1 style={{ margin: 0 }}>{b.title}</h1>
           <BriefStatus status={b.status} />
           <div className="spacer" />
           {isOwner && b.status === 'draft' && (
-            <button className="small" onClick={() => setBriefStatus('published')}>
+            <Button variant="accent" size="sm" onClick={() => setBriefStatus('published')}>
               Publish brief
-            </button>
+            </Button>
           )}
           {isOwner && b.status === 'published' && (
-            <button className="ghost small" onClick={() => setBriefStatus('closed')}>
+            <Button variant="outline" size="sm" onClick={() => setBriefStatus('closed')}>
               Close to applications
-            </button>
+            </Button>
           )}
         </div>
         <div className="small muted" style={{ marginTop: 4 }}>
           {b.legal_name} · budget {money(b.budget_min_minor, b.currency_code)}–{money(b.budget_max_minor, b.currency_code)}
           {' · '}{b.application_count} application{b.application_count === 1 ? '' : 's'}
+        </div>
+        <div className="row small" style={{ gap: 8, marginTop: 6 }}>
+          <Rating mean={b.mean_rating} count={b.review_count} />
+          <span className="muted">· {b.brand_completed_contracts} completed contract{b.brand_completed_contracts === 1 ? '' : 's'} on TalentHub</span>
         </div>
         <p style={{ marginTop: 12, marginBottom: 0 }}>{b.description}</p>
         {isOwner && b.status === 'draft' && (
@@ -511,14 +522,17 @@ export function BriefDetail({ briefId, user, go, refresh }) {
             Only you can see this draft. Creators cannot find or apply to it until you publish it.
           </p>
         )}
-      </div>
+      </Card>
+
+      {!isOwner && <ReviewList title={`What creators say about ${b.legal_name}`}
+                               reviews={b.brand_reviews} />}
 
       {isCreator && myApplication && (
         <>
-          <div className="section-label">Your application</div>
-          <div className="card">
-            <div className="row" style={{ gap: 8 }}>
-              <strong>{money(myApplication.proposed_fee_minor, b.currency_code)}</strong>
+          <SectionLabel>Your application</SectionLabel>
+          <Card>
+            <div className="row" style={{ gap: 10 }}>
+              <span className="figure-v">{money(myApplication.proposed_fee_minor, b.currency_code)}</span>
               <Badge tone={APP_TONE[myApplication.status]}>{myApplication.status}</Badge>
             </div>
             {myApplication.cover_note &&
@@ -528,14 +542,14 @@ export function BriefDetail({ briefId, user, go, refresh }) {
                 You were awarded this brief. <a href="#/contracts">Review and accept the contract →</a>
               </p>
             )}
-          </div>
+          </Card>
         </>
       )}
 
       {isCreator && !myApplication && b.status === 'published' && (
         <>
-          <div className="section-label">Apply</div>
-          <div className="card">
+          <SectionLabel>Apply</SectionLabel>
+          <Card>
             <form onSubmit={apply}>
               <Field label="Why you">
                 <textarea value={note} onChange={(e) => setNote(e.target.value)}
@@ -545,20 +559,20 @@ export function BriefDetail({ briefId, user, go, refresh }) {
                      hint="The brand funds this into escrow before you begin.">
                 <input type="number" value={fee} onChange={(e) => setFee(e.target.value)} />
               </Field>
-              <button>Submit application</button>
+              <Button variant="accent">Submit application</Button>
             </form>
-          </div>
+          </Card>
         </>
       )}
 
       {isOwner && (
         <>
-          <div className="section-label">Applications ({b.applications.length})</div>
+          <SectionLabel count={b.applications.length}>Applications</SectionLabel>
           <div className="stack">
             {b.applications.map((a) => {
               const open = ['submitted', 'shortlisted'].includes(a.status);
               return (
-                <div key={a.application_id} className="card">
+                <Card key={a.application_id}>
                   <div className="row" style={{ alignItems: 'flex-start', flexWrap: 'nowrap' }}>
                     <Avatar name={a.display_name} />
                     <div style={{ flex: 1 }}>
@@ -576,32 +590,29 @@ export function BriefDetail({ briefId, user, go, refresh }) {
                         {a.cover_note}
                       </p>
                     </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontWeight: 700, fontSize: 17 }}>
-                        {money(a.proposed_fee_minor, b.currency_code)}
-                      </div>
+                    <Figure value={money(a.proposed_fee_minor, b.currency_code)} caption="proposed fee">
                       {open && (
-                        <div className="stack" style={{ gap: 6, marginTop: 8, alignItems: 'flex-end' }}>
-                          <button className="go small" onClick={() => award(a.application_id)}>
+                        <div className="stack" style={{ gap: 6, marginTop: 10, alignItems: 'flex-end' }}>
+                          <Button variant="accent" size="sm" onClick={() => award(a.application_id)}>
                             Award this creator
-                          </button>
+                          </Button>
                           <div className="row" style={{ gap: 6 }}>
                             {a.status === 'submitted' && (
-                              <button className="ghost small"
+                              <Button variant="outline" size="sm"
                                       onClick={() => setAppStatus(a.application_id, 'shortlisted')}>
                                 Shortlist
-                              </button>
+                              </Button>
                             )}
-                            <button className="quiet small"
+                            <Button variant="quiet" size="sm"
                                     onClick={() => setAppStatus(a.application_id, 'rejected')}>
                               Reject
-                            </button>
+                            </Button>
                           </div>
                         </div>
                       )}
-                    </div>
+                    </Figure>
                   </div>
-                </div>
+                </Card>
               );
             })}
             {!b.applications.length && <Empty>No applications yet.</Empty>}
@@ -623,14 +634,13 @@ export function Contracts({ user, go }) {
 
   const group = (list, label, tone) => list.length > 0 && (
     <>
-      <div className="section-label" style={{ color: tone }}>{label}</div>
+      <SectionLabel count={list.length} style={{ color: tone }}>{label}</SectionLabel>
       <div className="stack">
         {list.map((c) => (
-          <div key={c.contract_id} className="card clickable"
-               onClick={() => go(`/contracts/${c.contract_id}`)}>
+          <Card key={c.contract_id} onClick={() => go(`/contracts/${c.contract_id}`)}>
             <div className="row" style={{ alignItems: 'flex-start' }}>
               <div style={{ flex: 1 }}>
-                <strong>{c.brief_title}</strong>
+                <h3 style={{ margin: 0 }}>{c.brief_title}</h3>
                 <div className="small muted">
                   {isBrand ? c.display_name : c.legal_name} · {c.milestones.length} milestones
                 </div>
@@ -640,18 +650,15 @@ export function Contracts({ user, go }) {
                   ))}
                 </div>
               </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontWeight: 700 }}>
-                  {money(c.agreed_fee_minor, c.currency_code)}
-                </div>
+              <Figure size="sm" value={money(c.agreed_fee_minor, c.currency_code)}>
                 {c.escrow_held_minor > 0 && (
                   <div className="tiny" style={{ color: 'var(--amber)', fontWeight: 700 }}>
                     {money(c.escrow_held_minor, c.currency_code)} in escrow
                   </div>
                 )}
-              </div>
+              </Figure>
             </div>
-          </div>
+          </Card>
         ))}
       </div>
     </>
@@ -659,12 +666,8 @@ export function Contracts({ user, go }) {
 
   return (
     <div className="page">
-      <div className="page-head">
-        <div>
-          <h1>Contracts</h1>
-          <p>Grouped by what needs your attention.</p>
-        </div>
-      </div>
+      <PageHeader eyebrow={isBrand ? 'Hiring' : 'My work'} title="Contracts"
+                  lede="Grouped by what needs your attention." />
       {/* FR-26 — an unaccepted contract needs the creator; the brand just waits. */}
       {group(rows.filter((c) => (c.status === 'pending_acceptance' && !isBrand) ||
                                 (c.status === 'active' && needsMe(c))),
@@ -708,32 +711,27 @@ export function ContractDetail({ contractId, user, go, refresh }) {
 
   return (
     <div className="page">
-      <button className="quiet small" onClick={() => go('/contracts')}>← Back to contracts</button>
+      <BackLink onClick={() => go('/contracts')}>Back to contracts</BackLink>
       <Banner tone="err">{err}</Banner>
       <Banner tone="ok">{ok}</Banner>
 
-      <div className="card" style={{ marginTop: 12 }}>
+      <Card className="lead">
         <div className="row" style={{ alignItems: 'flex-start' }}>
           <div style={{ flex: 1 }}>
-            <h2 style={{ marginBottom: 2 }}>{c.brief_title}</h2>
+            <h1 style={{ marginBottom: 2 }}>{c.brief_title}</h1>
             <div className="small muted">
               {c.legal_name} → {c.display_name} · {c.primary_discipline}
             </div>
           </div>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 20, fontWeight: 700 }}>
-              {money(c.agreed_fee_minor, c.currency_code)}
-            </div>
-            <div className="tiny muted">
-              agreed fee · {(c.commission_rate * 100).toFixed(0)}% platform commission
-            </div>
+          <Figure size="lg" value={money(c.agreed_fee_minor, c.currency_code)}
+                  caption={`agreed fee · ${(c.commission_rate * 100).toFixed(0)}% platform commission`}>
             <div style={{ marginTop: 6 }}><ContractStatus status={c.status} /></div>
-          </div>
+          </Figure>
         </div>
-      </div>
+      </Card>
 
       {c.status === 'pending_acceptance' && !isBrand && (
-        <div className="card notice">
+        <Card className="notice">
           <strong>{c.legal_name} has awarded you this work.</strong>
           <p className="small" style={{ margin: '6px 0 12px' }}>
             Accepting makes the contract binding: the fee, the {(c.commission_rate * 100).toFixed(0)}%
@@ -741,14 +739,14 @@ export function ContractDetail({ contractId, user, go, refresh }) {
             into escrow once you accept.
           </p>
           <div className="row">
-            <button className="go" onClick={() => act(
+            <Button variant="accent" onClick={() => act(
               () => api(`/contracts/${c.contract_id}/accept`, { method: 'POST' }),
               'Contract accepted. The brand can now fund the first milestone.')}>
               Accept contract
-            </button>
+            </Button>
             <CancelButton label="Decline" c={c} act={act} />
           </div>
-        </div>
+        </Card>
       )}
 
       {c.status === 'pending_acceptance' && isBrand && (
@@ -761,7 +759,9 @@ export function ContractDetail({ contractId, user, go, refresh }) {
         <Banner tone="info">This contract was cancelled before any money moved.</Banner>
       )}
 
-      <div className="section-label">Milestones</div>
+      {c.reviews && <ReviewPanel c={c} isBrand={isBrand} act={act} />}
+
+      <SectionLabel count={c.milestones.length}>Milestones</SectionLabel>
       <div className="stack">
         {c.milestones.map((m) => {
           const done = m.status === 'accepted';
@@ -781,16 +781,13 @@ export function ContractDetail({ contractId, user, go, refresh }) {
                     </div>
                   )}
                 </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontWeight: 700 }}>{money(m.amount_minor, c.currency_code)}</div>
-                </div>
+                <Figure size="sm" value={money(m.amount_minor, c.currency_code)} />
               </div>
 
               <Flow status={m.status} />
 
               {m.status === 'pending' && isBrand && live && (
-                <div style={{ background: '#fff', border: '1px solid #eccfa3',
-                              borderRadius: 6, padding: 12 }}>
+                <div className="fund-box">
                   <div className="money-line">
                     <span>Milestone amount</span>
                     <span>{money(m.amount_minor, c.currency_code)}</span>
@@ -803,12 +800,12 @@ export function ContractDetail({ contractId, user, go, refresh }) {
                     <span>Creator receives</span>
                     <span>{money(m.net_minor, c.currency_code)}</span>
                   </div>
-                  <button className="money" style={{ width: '100%', marginTop: 10 }}
+                  <Button variant="escrow" block style={{ marginTop: 12 }}
                           onClick={() => act(
                             () => api(`/milestones/${m.milestone_id}/fund`, { method: 'POST' }),
                             `${money(m.amount_minor, c.currency_code)} is now held in escrow.`)}>
-                    Fund {money(m.amount_minor, c.currency_code)} into escrow
-                  </button>
+                    <Icon name="lock" size={15} /> Fund {money(m.amount_minor, c.currency_code)} into escrow
+                  </Button>
                 </div>
               )}
 
@@ -831,13 +828,9 @@ export function ContractDetail({ contractId, user, go, refresh }) {
 
               {m.deliverables.length > 0 && (
                 <>
-                  <div className="section-label" style={{ marginTop: 14 }}>
-                    Submitted deliverables
-                  </div>
+                  <SectionLabel style={{ marginTop: 16 }}>Submitted deliverables</SectionLabel>
                   {m.deliverables.map((d) => (
-                    <div key={d.deliverable_id} className="row small"
-                         style={{ justifyContent: 'space-between',
-                                  borderBottom: '1px solid #eef0f4', padding: '6px 0' }}>
+                    <div key={d.deliverable_id} className="row small list-row">
                       <span><strong>{d.title}</strong> <span className="muted">{d.note}</span></span>
                       <span className="tiny muted">{d.created_at}</span>
                     </div>
@@ -847,18 +840,18 @@ export function ContractDetail({ contractId, user, go, refresh }) {
 
               {m.status === 'submitted' && isBrand && (
                 <div className="row" style={{ marginTop: 12 }}>
-                  <button className="go" onClick={() => act(
+                  <Button variant="accent" onClick={() => act(
                     () => api(`/milestones/${m.milestone_id}/accept`, { method: 'POST' }),
                     `Accepted. ${money(m.net_minor, c.currency_code)} released to ${c.display_name}.`)}>
                     Accept and release payment
-                  </button>
-                  <button className="ghost" disabled={m.revision_count >= 2}
+                  </Button>
+                  <Button variant="outline" disabled={m.revision_count >= 2}
                           onClick={() => act(
                             () => api(`/milestones/${m.milestone_id}/revise`, {
                               method: 'POST', body: { reason: 'Changes requested' } }),
                             'Revision requested.')}>
                     Request revision
-                  </button>
+                  </Button>
                   {m.revision_count >= 2 && (
                     <span className="tiny muted">Revision limit reached (FR-30)</span>
                   )}
@@ -875,11 +868,11 @@ export function ContractDetail({ contractId, user, go, refresh }) {
               {m.status === 'submitted' && <RaiseDispute m={m} act={act} />}
 
               <div style={{ marginTop: 12 }}>
-                <button className="quiet small"
+                <Button variant="quiet" size="sm"
                         onClick={() => setShowLedger({ ...showLedger,
                                                        [m.milestone_id]: !showLedger[m.milestone_id] })}>
                   {showLedger[m.milestone_id] ? 'Hide' : 'Show'} ledger postings ({m.ledger.length})
-                </button>
+                </Button>
                 {showLedger[m.milestone_id] && (
                   <div style={{ marginTop: 8 }}>
                     <LedgerTable entries={m.ledger} currency={c.currency_code} />
@@ -909,7 +902,7 @@ function RaiseDispute({ m, act }) {
   const [reason, setReason] = useState('');
   if (!open) return (
     <div style={{ marginTop: 10 }}>
-      <button className="quiet small" onClick={() => setOpen(true)}>Raise a dispute…</button>
+      <Button variant="quiet" size="sm" onClick={() => setOpen(true)}>Raise a dispute…</Button>
     </div>
   );
   return (
@@ -923,12 +916,12 @@ function RaiseDispute({ m, act }) {
       <textarea value={reason} onChange={(e) => setReason(e.target.value)}
                 placeholder="What went wrong, and what outcome you think is fair" />
       <div className="row" style={{ marginTop: 8 }}>
-        <button className="danger" disabled={reason.trim().length < 10} onClick={() => act(
+        <Button variant="danger" disabled={reason.trim().length < 10} onClick={() => act(
           () => api(`/milestones/${m.milestone_id}/dispute`, { method: 'POST', body: { reason } }),
           'Dispute raised. The milestone is frozen until an administrator rules.')}>
           Freeze milestone and raise dispute
-        </button>
-        <button className="quiet" onClick={() => setOpen(false)}>Cancel</button>
+        </Button>
+        <Button variant="quiet" onClick={() => setOpen(false)}>Cancel</Button>
       </div>
     </div>
   );
@@ -968,6 +961,89 @@ function DisputeNote({ d, m, c, isBrand }) {
   );
 }
 
+/** FR-37 — published reviews, newest first. Renders nothing when there are none. */
+function ReviewList({ title, reviews }) {
+  if (!reviews?.length) return null;
+  return (
+    <>
+      <SectionLabel count={reviews.length}>{title}</SectionLabel>
+      <Card>
+        {reviews.map((r, i) => (
+          <div key={i} className="review">
+            <div className="row" style={{ gap: 8 }}>
+              <span className="rating"><span aria-hidden="true">{'★'.repeat(r.rating)}</span>
+                <span className="sr-only">{r.rating} of 5</span></span>
+              <strong className="small">{r.reviewer_name}</strong>
+              <span className="tiny muted">· {r.brief_title} · {r.created_at.slice(0, 10)}</span>
+            </div>
+            <p className="small" style={{ margin: '4px 0 0' }}>{r.body}</p>
+          </div>
+        ))}
+      </Card>
+    </>
+  );
+}
+
+/**
+ * FR-37 — the two-way review on a completed contract. The other side's review
+ * stays sealed until you submit yours or the 14-day window closes; the server
+ * never sends its content before then.
+ */
+function ReviewPanel({ c, isBrand, act }) {
+  const [rating, setRating] = useState(0);
+  const [body, setBody] = useState('');
+  const r = c.reviews;
+  const other = isBrand ? c.display_name : c.legal_name;
+
+  return (
+    <Card style={{ marginTop: 12 }}>
+      <h3 style={{ marginBottom: 4 }}>Reviews</h3>
+
+      {r.can_review ? (
+        <>
+          <p className="small muted" style={{ marginTop: 0 }}>
+            How was working with {other}? {r.theirs?.submitted
+              ? `They have already reviewed you — yours unlocks theirs.`
+              : `Neither review is shown until you both submit, or until ${r.window_closes_at.slice(0, 10)}.`}
+          </p>
+          <StarInput value={rating} onChange={setRating} name={`rate-${c.contract_id}`} />
+          <textarea style={{ marginTop: 8 }} value={body} onChange={(e) => setBody(e.target.value)}
+                    placeholder={isBrand ? 'Quality of the work, communication, timing…'
+                                         : 'Clarity of the brief, feedback, payment…'} />
+          <Button variant="accent" style={{ marginTop: 10 }} disabled={!rating || !body.trim()} onClick={() => act(
+            () => api(`/contracts/${c.contract_id}/review`, { method: 'POST', body: { rating, body } }),
+            'Thanks — your review is in.')}>
+            Submit review
+          </Button>
+        </>
+      ) : !r.mine && (
+        <p className="small muted" style={{ marginTop: 0 }}>The 14-day review window has closed.</p>
+      )}
+
+      {r.mine && (
+        <div className="review">
+          <div className="tiny muted">Your review of {other}</div>
+          <span className="rating">{'★'.repeat(r.mine.rating)}</span>
+          <p className="small" style={{ margin: '4px 0 0' }}>{r.mine.body}</p>
+        </div>
+      )}
+      {r.theirs && (
+        <div className="review">
+          <div className="tiny muted">{other}’s review of you</div>
+          {r.theirs.submitted
+            ? <p className="small muted" style={{ margin: '4px 0 0' }}>
+                Submitted — sealed until you review, or until {r.window_closes_at.slice(0, 10)}.
+              </p>
+            : <>
+                <span className="rating">{'★'.repeat(r.theirs.rating)}</span>
+                <p className="small" style={{ margin: '4px 0 0' }}>{r.theirs.body}</p>
+              </>}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 const CONTRACT_STATUS = {
   pending_acceptance: ['amber', 'awaiting acceptance'], active: ['navy', 'active'],
   completed: ['green', 'completed'], cancelled: ['grey', 'cancelled'], disputed: ['red', 'disputed'],
@@ -980,15 +1056,15 @@ const ContractStatus = ({ status }) => {
 /** FR-34 — a two-step button: the second click confirms, so a stray click cannot cancel. */
 function CancelButton({ label, c, act }) {
   const [armed, setArmed] = useState(false);
-  if (!armed) return <button className="ghost" onClick={() => setArmed(true)}>{label}</button>;
+  if (!armed) return <Button variant="outline" onClick={() => setArmed(true)}>{label}</Button>;
   return (
     <span className="row" style={{ gap: 6 }}>
-      <button className="danger" onClick={() => act(
+      <Button variant="danger" onClick={() => act(
         () => api(`/contracts/${c.contract_id}/cancel`, { method: 'POST' }),
         'Contract cancelled. No money had moved.')}>
         Yes, {label.toLowerCase()}
-      </button>
-      <button className="quiet" onClick={() => setArmed(false)}>Keep it</button>
+      </Button>
+      <Button variant="quiet" onClick={() => setArmed(false)}>Keep it</Button>
     </span>
   );
 }
@@ -1014,7 +1090,7 @@ function SubmitForm({ milestone, act }) {
                  placeholder="Anything they should know" />
         </Field>
       </div>
-      <button>Submit for review</button>
+      <Button variant="accent">Submit for review</Button>
     </form>
   );
 }
@@ -1043,12 +1119,8 @@ export function Money({ refresh }) {
 
   return (
     <div className="page">
-      <div className="page-head">
-        <div>
-          <h1>Money</h1>
-          <p>Released funds land here, ready to withdraw.</p>
-        </div>
-      </div>
+      <PageHeader eyebrow="Earnings" title="Money"
+                  lede="Released funds land here, ready to withdraw." />
       <Banner tone="err">{err}</Banner>
       <Banner tone="ok">{ok}</Banner>
 
@@ -1059,18 +1131,18 @@ export function Money({ refresh }) {
               sub={`${payouts.length} payout${payouts.length === 1 ? '' : 's'}`} />
         <div className="stat">
           <div className="k">Withdraw</div>
-          <button className="money" style={{ width: '100%', marginTop: 8 }}
+          <Button variant="accent" size="lg" block style={{ marginTop: 10 }}
                   disabled={!bal?.available_minor} onClick={withdraw}>
             Withdraw everything
-          </button>
+          </Button>
           <div className="tiny muted" style={{ marginTop: 6 }}>
             Bank account ····4417
           </div>
         </div>
       </div>
 
-      <div className="section-label">Payout history</div>
-      <div className="card">
+      <SectionLabel count={payouts.length}>Payout history</SectionLabel>
+      <Card>
         {payouts.length ? (
           <table>
             <thead>
@@ -1090,7 +1162,7 @@ export function Money({ refresh }) {
             </tbody>
           </table>
         ) : <p className="small muted" style={{ margin: 0 }}>No withdrawals yet.</p>}
-      </div>
+      </Card>
     </div>
   );
 }
@@ -1106,12 +1178,8 @@ export function LedgerPage() {
 
   return (
     <div className="page">
-      <div className="page-head">
-        <div>
-          <h1>Ledger</h1>
-          <p>Every movement of money, append-only and double entry.</p>
-        </div>
-      </div>
+      <PageHeader eyebrow="Audit" title="Ledger"
+                  lede="Every movement of money, append-only and double entry." />
 
       {rec && (
         <Banner tone={rec.balanced ? 'ok' : 'err'}>
@@ -1128,7 +1196,7 @@ export function LedgerPage() {
         ))}
       </div>
 
-      <div className="card">
+      <Card>
         <table>
           <thead>
             <tr><th>#</th><th>Account</th><th>Dr/Cr</th><th className="num">Amount</th>
@@ -1154,7 +1222,7 @@ export function LedgerPage() {
         {!entries.length && <p className="small muted" style={{ margin: 0 }}>
           Nothing posted yet. Fund a milestone to see the first entries.
         </p>}
-      </div>
+      </Card>
     </div>
   );
 }

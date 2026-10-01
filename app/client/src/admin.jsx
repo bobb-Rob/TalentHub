@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { api, money, toMinor } from './api.js';
-import { Badge, Banner, Empty, Field } from './components/ui.jsx';
+import {
+  Badge, Banner, Card, Button, Empty, Field, Figure, PageHeader, SectionLabel,
+} from './components/ui.jsx';
 
 /** FR-36 — the administrator's queue: open disputes first, then the record. */
 export function AdminDisputes() {
@@ -15,15 +17,11 @@ export function AdminDisputes() {
 
   return (
     <div className="page">
-      <div className="page-head">
-        <div>
-          <h1>Disputes</h1>
-          <p>Each one is a frozen milestone. Your ruling moves the money and is final.</p>
-        </div>
-      </div>
+      <PageHeader eyebrow="Administration" title="Disputes"
+                  lede="Each one is a frozen milestone. Your ruling moves the money and is final." />
       <Banner tone="err">{err}</Banner>
 
-      <div className="section-label">Open ({open.length})</div>
+      <SectionLabel count={open.length}>Open</SectionLabel>
       <div className="stack">
         {open.map((d) => <OpenDispute key={d.dispute_id} d={d} onResolved={load} />)}
         {!open.length && <Empty>No open disputes.</Empty>}
@@ -31,8 +29,8 @@ export function AdminDisputes() {
 
       {closed.length > 0 && (
         <>
-          <div className="section-label">Resolved ({closed.length})</div>
-          <div className="card">
+          <SectionLabel count={closed.length}>Resolved</SectionLabel>
+          <Card>
             <table>
               <thead><tr><th>Brief</th><th>Parties</th><th>Outcome</th>
                          <th className="num">Milestone</th><th>Reason recorded</th><th>When</th></tr></thead>
@@ -52,7 +50,7 @@ export function AdminDisputes() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </Card>
         </>
       )}
     </div>
@@ -84,19 +82,16 @@ function OpenDispute({ d, onResolved }) {
   };
 
   return (
-    <div className="card">
+    <Card>
       <Banner tone="err">{err}</Banner>
       <div className="row" style={{ alignItems: 'flex-start' }}>
         <div style={{ flex: 1 }}>
-          <strong>{d.brief_title}</strong>
+          <h3 style={{ margin: 0 }}>{d.brief_title}</h3>
           <div className="small muted">
             Milestone {d.sequence_no} — {d.milestone_description} · {d.legal_name} → {d.display_name}
           </div>
         </div>
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ fontWeight: 700, fontSize: 18 }}>{money(amount, cur)}</div>
-          <div className="tiny muted">frozen in escrow</div>
-        </div>
+        <Figure tone="amber" value={money(amount, cur)} caption="frozen in escrow" />
       </div>
 
       <div className="dispute-box">
@@ -106,16 +101,16 @@ function OpenDispute({ d, onResolved }) {
         <p className="small" style={{ margin: '6px 0 0' }}>“{d.reason}”</p>
       </div>
 
-      <div className="section-label">What was delivered</div>
+      <SectionLabel count={d.deliverables.length}>What was delivered</SectionLabel>
       {d.deliverables.length ? d.deliverables.map((x, i) => (
-        <div key={i} className="small" style={{ padding: '4px 0', borderBottom: '1px solid #eef0f4' }}>
+        <div key={i} className="small list-row">
           <strong>{x.title}</strong> <span className="muted">{x.note}</span>
           {x.external_link && <> · <a href={x.external_link} target="_blank" rel="noreferrer">link</a></>}
           <span className="tiny muted" style={{ float: 'right' }}>{x.created_at}</span>
         </div>
       )) : <p className="small muted">Nothing was submitted.</p>}
 
-      <div className="section-label">Ruling</div>
+      <SectionLabel>Ruling</SectionLabel>
       <div className="choice three">
         {[['release', 'Release', 'Pay the creator in full'],
           ['split', 'Split', 'Part to each side'],
@@ -151,12 +146,12 @@ function OpenDispute({ d, onResolved }) {
           <Field label="Reason for the ruling" hint="Both parties see this.">
             <textarea value={note} onChange={(e) => setNote(e.target.value)} />
           </Field>
-          <button className={outcome === 'refund' ? 'money' : 'go'}
+          <Button variant={outcome === 'refund' ? 'escrow' : 'accent'}
                   disabled={busy || !note.trim() || !splitValid} onClick={resolve}>
             {busy ? 'Recording ruling…' : `Rule: ${outcome}`}
-          </button>
+          </Button>
         </>
       )}
-    </div>
+    </Card>
   );
 }

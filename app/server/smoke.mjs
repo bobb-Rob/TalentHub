@@ -205,10 +205,13 @@ const cp = await call('PUT', '/creator/profile', { token: ct, body: {
   display_name: 'Smoke Creator', biography: 'Made by the smoke test.', country_code: 'KE',
   city: 'Mombasa', primary_discipline: 'Photography', languages: 'English, Swahili',
   engagement_modes: ['commission', 'reach'], day_rate_minor: 500000,
-  currency_code: 'KES', availability: 'limited' } });
+  currency_code: 'NGN', availability: 'limited' } });
 check('the creator publishes a profile (FR-08, FR-13, FR-14)',
-  cp.body?.availability === 'limited' && cp.body?.languages === 'English, Swahili',
-  JSON.stringify(cp.body));
+  cp.body?.availability === 'limited' && cp.body?.languages === 'English, Swahili' &&
+  cp.body?.currency_code === 'NGN', JSON.stringify(cp.body));
+const badCurrency = await call('PUT', '/creator/profile', { token: ct, body: {
+  day_rate_minor: 500000, currency_code: 'KES' } });
+check('a rate in any currency but NGN is refused', badCurrency.status === 400);
 
 const skills = (await call('GET', '/skills')).body;
 const photo = skills.filter((s) => s.discipline === 'Photography').slice(0, 2);
@@ -384,6 +387,90 @@ check('the split posts one balanced four-line transaction',
   splitTx.length === 4 &&
   splitTx.filter((e) => e.direction === 'debit').reduce((s, e) => s + e.amount_minor, 0) ===
   splitTx.filter((e) => e.direction === 'credit').reduce((s, e) => s + e.amount_minor, 0));
+
+// ---------------------------------------------------------------- reviews
+console.log('\nReviews\n');
+
+const reviewEarly = await call('POST', `/contracts/${contract.contract_id}/review`,
+  { token: brand.token, body: { rating: 5, body: 'Too soon.' } });
+check('a contract still in progress cannot be reviewed', reviewEarly.status === 409);
+
+const rc = dAward.contract_id;                     // the completed dispute contract
+const badRating = await call('POST', `/contracts/${rc}/review`,
+  { token: brand.token, body: { rating: 6, body: 'Off the scale.' } });
+check('a rating must be 1 to 5', badRating.status === 400);
+const noBody = await call('POST', `/contracts/${rc}/review`,
+  { token: brand.token, body: { rating: 4 } });
+check('a rating needs words with it', noBody.status === 400);
+const outsiderReview = await call('POST', `/contracts/${rc}/review`,
+  { token: creator.token, body: { rating: 1, body: 'Not my contract.' } });
+check('only a party can review', outsiderReview.status === 403);
+
+const brandReview = await call('POST', `/contracts/${rc}/review`,
+  { token: brand.token, body: { rating: 4, body: 'Good work once the dispute was settled.' } });
+check('the brand reviews the creator (FR-37)',
+  brandReview.body?.contract?.reviews?.mine?.rating === 4, JSON.stringify(brandReview.body));
+const reviewTwice = await call('POST', `/contracts/${rc}/review`,
+  { token: brand.token, body: { rating: 5, body: 'Changing my mind.' } });
+check('each party reviews once', reviewTwice.status === 409);
+
+let seen = (await call('GET', `/contracts/${rc}`, { token: ct })).body.reviews;
+check('the other side sees that a review exists but not what it says',
+  seen.theirs?.submitted === true && seen.theirs.rating === undefined && seen.can_review === true,
+  JSON.stringify(seen));
+let pubProfile = (await call('GET', `/creators/${cp.body.profile_id}`)).body;
+check('an unpublished review does not count toward the rating',
+  pubProfile.review_count === 0 && pubProfile.mean_rating === null);
+
+await call('POST', `/contracts/${rc}/review`,
+  { token: ct, body: { rating: 3, body: 'Fair in the end, but the brief kept moving.' } });
+seen = (await call('GET', `/contracts/${rc}`, { token: ct })).body.reviews;
+check('once both have reviewed, both are published',
+  seen.theirs?.rating === 4 && seen.mine?.rating === 3, JSON.stringify(seen));
+pubProfile = (await call('GET', `/creators/${cp.body.profile_id}`)).body;
+check('the creator profile shows the rating and the review (FR-38)',
+  pubProfile.mean_rating === 4 && pubProfile.review_count === 1 &&
+  pubProfile.reviews[0].body.startsWith('Good work'), JSON.stringify(pubProfile.reviews));
+
+const everyone = (await call('GET', '/creators')).body;
+const zola = everyone.find((x) => x.display_name === 'Zola Mthembu');
+check('a one-sided review is published once 14 days have passed',
+  zola?.review_count === 1 && zola.mean_rating === 5, JSON.stringify(zola));
+const kwesi = everyone.find((x) => x.display_name === 'Kwesi Boateng');
+check('ratings appear in search results', kwesi?.review_count === 1 && kwesi.mean_rating === 5);
+const briefView = (await call('GET', `/briefs/${dBrief.brief_id}`, { token: ct })).body;
+check('a brief shows the brand\'s rating and record',
+  briefView.review_count >= 2 && briefView.brand_completed_contracts >= 3,
+  `${briefView.mean_rating} from ${briefView.review_count}, ${briefView.brand_completed_contracts} completed`);
+
+// ---------------------------------------------------------------- notifications
+console.log('\nNotifications\n');
+
+const creatorInbox = (await call('GET', '/notifications', { token: ct })).body;
+const kinds = new Set(creatorInbox.items.map((n) => n.kind));
+check('the creator was notified of award, funding, dispute and review (FR-40)',
+  ['award', 'funding', 'dispute', 'review'].every((k) => kinds.has(k)), [...kinds].join());
+check('notifications link to where the action is',
+  creatorInbox.items.every((n) => n.link?.startsWith('/')));
+const brandInbox = (await call('GET', '/notifications', { token: brand.token })).body;
+check('the brand was notified of applications and submissions',
+  brandInbox.items.some((n) => n.kind === 'application') &&
+  brandInbox.items.some((n) => n.kind === 'submission'));
+const adminInbox = (await call('GET', '/notifications', { token: admin.token })).body;
+check('administrators are notified of new disputes', adminInbox.items.some((n) => n.kind === 'dispute'));
+const sealed = creatorInbox.items.find((n) => n.kind === 'review' && n.message.includes('reviewed you'));
+check('a review notice never reveals the review', sealed && !sealed.message.includes('Good work'));
+
+check('unread notifications are counted', creatorInbox.unread > 0);
+const one = await call('POST', '/notifications/read',
+  { token: ct, body: { notification_id: creatorInbox.items[0].notification_id } });
+check('one notification can be marked read', one.body.unread === creatorInbox.unread - 1);
+const all = await call('POST', '/notifications/read', { token: ct });
+check('all can be marked read', all.body.unread === 0);
+const brandStill = (await call('GET', '/notifications', { token: brand.token })).body;
+check('marking read only touches your own inbox', brandStill.unread === brandInbox.unread);
+const anonInbox = await call('GET', '/notifications');
+check('the inbox needs a signed-in user', anonInbox.status === 401);
 
 // ---------------------------------------------------------------- the books
 console.log('\nLedger\n');

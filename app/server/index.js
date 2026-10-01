@@ -5,8 +5,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { db, id, logEvent } from './db.js';
-import { post, balance, milestoneLedger, reconcile, LedgerError } from './ledger.js';
+import { post, balance, milestoneLedger, reconcile, LedgerError, CURRENCY } from './ledger.js';
 import { register, login, currentUser, requireUser, HttpError } from './auth.js';
+import { notify, userOfCreator, userOfBrand, admins, inbox, markRead } from './notify.js';
 
 const app = express();
 // CORS_ORIGIN is a comma-separated allow-list (e.g. the Vercel client URL).
@@ -103,6 +104,13 @@ function checkCreatorProfile(b) {
   // Money is integer minor units (rule 1); a fractional rate is a client bug.
   if (b.day_rate_minor != null && (!Number.isInteger(b.day_rate_minor) || b.day_rate_minor < 0))
     throw new HttpError(400, 'the day rate must be a whole number of minor units');
+  checkCurrency(b);
+}
+
+/** NGN only for now: refuse anything else rather than store a rate nobody can pay in. */
+function checkCurrency(b) {
+  if (b.currency_code != null && b.currency_code !== CURRENCY)
+    throw new HttpError(400, `TalentHub settles in ${CURRENCY} only`);
 }
 
 app.put('/api/creator/profile', requireUser('creator'), wrap((req, res) => {
@@ -120,7 +128,7 @@ app.put('/api/creator/profile', requireUser('creator'), wrap((req, res) => {
       b.biography || '', b.country_code || 'NG', b.city || '',
       b.primary_discipline || 'Motion design', b.languages || '',
       (b.engagement_modes || ['commission']).join(','),
-      b.day_rate_minor ?? null, b.currency_code || 'NGN',
+      b.day_rate_minor ?? null, CURRENCY,
       b.availability || 'available');
     logEvent(req.user.user_id, profile_id, 'profile.published');
   } else {
@@ -140,7 +148,7 @@ app.put('/api/creator/profile', requireUser('creator'), wrap((req, res) => {
       b.display_name ?? null, b.biography ?? null, b.country_code ?? null,
       b.city ?? null, b.primary_discipline ?? null, b.languages ?? null,
       b.engagement_modes ? b.engagement_modes.join(',') : null,
-      b.day_rate_minor ?? null, b.currency_code ?? null, b.availability ?? null,
+      b.day_rate_minor ?? null, CURRENCY, b.availability ?? null,
       profile.profile_id);
     logEvent(req.user.user_id, profile.profile_id, 'profile.updated');
   }
@@ -269,6 +277,7 @@ app.get('/api/creators', wrap((req, res) => {
   for (const r of rows) {
     r.social = db.prepare('SELECT platform, handle, follower_count, metrics_source FROM social_accounts WHERE profile_id = ?').all(r.profile_id);
     r.portfolio = db.prepare('SELECT item_id, title, role_played FROM portfolio_items WHERE profile_id = ? ORDER BY display_order').all(r.profile_id);
+    Object.assign(r, ratingOf('creator', r.profile_id));
   }
   ok(res, rows);
 }));
@@ -280,6 +289,8 @@ app.get('/api/creators/:profileId', wrap((req, res) => {
   r.social = db.prepare('SELECT * FROM social_accounts WHERE profile_id = ?').all(r.profile_id);
   r.portfolio = db.prepare('SELECT * FROM portfolio_items WHERE profile_id = ? ORDER BY display_order').all(r.profile_id);
   r.skills = skillsOf(r.profile_id);
+  Object.assign(r, ratingOf('creator', r.profile_id));
+  r.reviews = reviewsAbout('creator', r.profile_id);
   ok(res, r);
 }));
 
@@ -320,6 +331,7 @@ app.post('/api/briefs', requireUser('brand'), wrap((req, res) => {
   if (!brand) throw new HttpError(400, 'publish your organisation profile first');
   const b = req.body || {};
   if (!b.title || !b.description) throw new HttpError(400, 'a brief needs a title and description');
+  checkCurrency(b);
   const status = b.status || 'published';
   if (!['draft', 'published'].includes(status))            // FR-22
     throw new HttpError(400, 'a new brief is either a draft or published');
@@ -331,7 +343,7 @@ app.post('/api/briefs', requireUser('brand'), wrap((req, res) => {
     brief_id, brand.brand_id, b.engagement_mode || 'commission', b.title,
     b.description, (b.required_skills || []).join(','),
     b.budget_min_minor ?? null, b.budget_max_minor ?? null,
-    b.currency_code || 'NGN', b.closes_at || null, status);
+    CURRENCY, b.closes_at || null, status);
   logEvent(req.user.user_id, brief_id, `brief.${status === 'draft' ? 'drafted' : 'published'}`, b.title);
   ok(res, db.prepare('SELECT * FROM briefs WHERE brief_id = ?').get(brief_id));
 }));
@@ -397,6 +409,11 @@ app.get('/api/briefs/:id', wrap((req, res) => {
   brief.applications = isOwner ? applications
     : applications.filter((a) => mine && a.creator_id === mine);
   brief.application_count = applications.length;
+  // FR-38 — creators judge the brand by its record before applying.
+  Object.assign(brief, ratingOf('brand', brief.brand_id));
+  brief.brand_completed_contracts = db.prepare(
+    "SELECT COUNT(*) n FROM contracts WHERE brand_id = ? AND status = 'completed'").get(brief.brand_id).n;
+  brief.brand_reviews = reviewsAbout('brand', brief.brand_id);
   ok(res, brief);
 }));
 
@@ -416,6 +433,8 @@ app.post('/api/briefs/:id/apply', requireUser('creator'), wrap((req, res) => {
       VALUES (?,?,?,?,?)`).run(application_id, brief.brief_id, p.profile_id,
       req.body.cover_note || '', fee);
     logEvent(req.user.user_id, application_id, 'application.submitted', brief.title);
+    notify(userOfBrand(brief.brand_id), 'application',
+      `${p.display_name} applied to “${brief.title}”`, `/briefs/${brief.brief_id}`);
     ok(res, { application_id });
   } catch (err) {
     if (String(err.message).includes('UNIQUE'))
@@ -428,7 +447,7 @@ app.post('/api/applications/:id/status', requireUser('brand'), wrap((req, res) =
   const status = req.body?.status;
   if (!['shortlisted', 'rejected'].includes(status))
     throw new HttpError(400, 'status must be shortlisted or rejected');
-  const app_ = db.prepare(`SELECT a.*, b.brand_id FROM applications a
+  const app_ = db.prepare(`SELECT a.*, b.brand_id, b.title FROM applications a
     JOIN briefs b ON b.brief_id = a.brief_id WHERE a.application_id = ?`)
     .get(req.params.id);
   if (!app_) return res.status(404).json({ error: 'no such application' });
@@ -439,6 +458,10 @@ app.post('/api/applications/:id/status', requireUser('brand'), wrap((req, res) =
   db.prepare('UPDATE applications SET status = ? WHERE application_id = ?')
     .run(status, app_.application_id);
   logEvent(req.user.user_id, app_.application_id, `application.${status}`);
+  notify(userOfCreator(app_.creator_id), 'application',
+    status === 'shortlisted' ? `You were shortlisted for “${app_.title}”`
+                             : `Your application to “${app_.title}” was not taken forward`,
+    `/briefs/${app_.brief_id}`);
   ok(res, { status });
 }));
 
@@ -494,11 +517,67 @@ app.post('/api/applications/:id/award', requireUser('brand'), wrap((req, res) =>
   })();
 
   logEvent(req.user.user_id, contract_id, 'contract.awarded', app_.title);
+  notify(userOfCreator(app_.creator_id), 'award',
+    `${brand.trading_name || brand.legal_name} awarded you “${app_.title}” — review and accept the contract`,
+    `/contracts/${contract_id}`);
   ok(res, { contract_id });
 }));
 
+// ---------------------------------------------------------------- reviews
+// FR-37 — a review is published once both parties have reviewed, or 14 days
+// after the contract completed. Until then its content never leaves the server,
+// so neither side can read the other's before writing their own. The window
+// also closes at 14 days, so a late review cannot answer a published one.
+const REVIEW_DAYS = 14;
+const PUBLISHED = `(EXISTS (SELECT 1 FROM reviews o WHERE o.contract_id = r.contract_id
+                            AND o.reviewer_role <> r.reviewer_role)
+                    OR c.completed_at <= datetime('now', '-${REVIEW_DAYS} days'))`;
+
+/** FR-38 — mean rating and count of published reviews about a creator or brand. */
+function ratingOf(subject, id) {
+  const [col, by] = subject === 'creator' ? ['creator_id', 'brand'] : ['brand_id', 'creator'];
+  const row = db.prepare(`SELECT ROUND(AVG(r.rating), 1) mean, COUNT(*) n
+    FROM reviews r JOIN contracts c ON c.contract_id = r.contract_id
+    WHERE c.${col} = ? AND r.reviewer_role = ? AND ${PUBLISHED}`).get(id, by);
+  return { mean_rating: row.mean, review_count: row.n };
+}
+
+function reviewsAbout(subject, id) {
+  const [col, by] = subject === 'creator' ? ['creator_id', 'brand'] : ['brand_id', 'creator'];
+  return db.prepare(`SELECT r.rating, r.body, r.created_at, br.title AS brief_title,
+      CASE WHEN r.reviewer_role = 'brand' THEN COALESCE(NULLIF(bp.trading_name, ''), bp.legal_name)
+           ELSE cp.display_name END AS reviewer_name
+    FROM reviews r JOIN contracts c ON c.contract_id = r.contract_id
+    JOIN briefs br ON br.brief_id = c.brief_id
+    JOIN brand_profiles bp ON bp.brand_id = c.brand_id
+    JOIN creator_profiles cp ON cp.profile_id = c.creator_id
+    WHERE c.${col} = ? AND r.reviewer_role = ? AND ${PUBLISHED}
+    ORDER BY r.created_at DESC`).all(id, by);
+}
+
+/** The review panel for one party: theirs in full, the other side's only once published. */
+function reviewState(c, role) {
+  if (c.status !== 'completed' || !['creator', 'brand'].includes(role)) return null;
+  const rows = db.prepare('SELECT * FROM reviews WHERE contract_id = ?').all(c.contract_id);
+  const mine = rows.find((r) => r.reviewer_role === role);
+  const theirs = rows.find((r) => r.reviewer_role !== role);
+  const closes = db.prepare(`SELECT datetime(?, '+${REVIEW_DAYS} days') t`).get(c.completed_at).t;
+  const expired = db.prepare("SELECT ? <= datetime('now') e").get(closes).e === 1;
+  const published = (mine && theirs) || expired;
+  const shape = (r) => r && { rating: r.rating, body: r.body, created_at: r.created_at };
+  return {
+    window_closes_at: closes,
+    can_review: !mine && !expired,
+    mine: shape(mine) || null,
+    theirs: theirs ? (published ? shape(theirs) : { submitted: true }) : null,
+  };
+}
+
+const otherParty = (c, role) =>
+  role === 'creator' ? userOfBrand(c.brand_id) : userOfCreator(c.creator_id);
+
 // ---------------------------------------------------------------- contracts
-function contractView(contract_id) {
+function contractView(contract_id, role = null) {
   const c = db.prepare(`SELECT c.*, br.title AS brief_title, bp.legal_name,
     cp.display_name, cp.primary_discipline
     FROM contracts c
@@ -524,6 +603,7 @@ function contractView(contract_id) {
   c.escrow_held_minor = c.milestones
     .filter((m) => ['funded', 'in_progress', 'submitted', 'disputed'].includes(m.status))
     .reduce((s, m) => s + m.amount_minor, 0);
+  c.reviews = reviewState(c, role);
   return c;
 }
 
@@ -533,11 +613,11 @@ app.get('/api/contracts', requireUser('creator', 'brand'), wrap((req, res) => {
         .all(creatorOf(req)?.profile_id ?? '')
     : db.prepare('SELECT contract_id FROM contracts WHERE brand_id = ? ORDER BY created_at DESC')
         .all(brandOf(req)?.brand_id ?? '');
-  ok(res, rows.map((r) => contractView(r.contract_id)));
+  ok(res, rows.map((r) => contractView(r.contract_id, req.user.role)));
 }));
 
 app.get('/api/contracts/:id', requireUser('creator', 'brand'), wrap((req, res) => {
-  const c = contractView(req.params.id);
+  const c = contractView(req.params.id, req.user.role);
   if (!c) return res.status(404).json({ error: 'no such contract' });
   const mine = req.user.role === 'creator'
     ? c.creator_id === creatorOf(req)?.profile_id
@@ -556,7 +636,10 @@ app.post('/api/contracts/:id/accept', requireUser('creator'), wrap((req, res) =>
   db.prepare(`UPDATE contracts SET status = 'active', creator_accepted_at = datetime('now')
               WHERE contract_id = ?`).run(c.contract_id);
   logEvent(req.user.user_id, c.contract_id, 'contract.accepted');
-  ok(res, { contract: contractView(c.contract_id) });
+  notify(userOfBrand(c.brand_id), 'contract',
+    `${creatorOf(req).display_name} accepted the contract — you can fund milestone 1`,
+    `/contracts/${c.contract_id}`);
+  ok(res, { contract: contractView(c.contract_id, req.user.role) });
 }));
 
 // FR-34 — either party may walk away while no money has moved. Each milestone
@@ -583,7 +666,41 @@ app.post('/api/contracts/:id/cancel', requireUser('creator', 'brand'), wrap((req
     db.prepare("UPDATE contracts SET status = 'cancelled' WHERE contract_id = ?").run(c.contract_id);
   })();
   logEvent(req.user.user_id, c.contract_id, 'contract.cancelled', req.body?.reason);
-  ok(res, { contract: contractView(c.contract_id) });
+  notify(otherParty(c, req.user.role), 'contract',
+    `A contract was cancelled by the ${req.user.role} before any money moved`,
+    `/contracts/${c.contract_id}`);
+  ok(res, { contract: contractView(c.contract_id, req.user.role) });
+}));
+
+// FR-37 — one review per party per completed contract, inside the window.
+app.post('/api/contracts/:id/review', requireUser('creator', 'brand'), wrap((req, res) => {
+  const c = db.prepare('SELECT * FROM contracts WHERE contract_id = ?').get(req.params.id);
+  if (!c) return res.status(404).json({ error: 'no such contract' });
+  const role = req.user.role;
+  const mine = role === 'creator'
+    ? c.creator_id === creatorOf(req)?.profile_id
+    : c.brand_id === brandOf(req)?.brand_id;
+  if (!mine) throw new HttpError(403, 'this contract is not yours');
+  if (c.status !== 'completed') throw new HttpError(409, 'reviews open once the contract is complete');
+  const state = reviewState(c, role);
+  if (state.mine) throw new HttpError(409, 'you have already reviewed this contract');
+  if (!state.can_review) throw new HttpError(409, 'the 14-day review window has closed');
+
+  const rating = req.body?.rating;
+  const body = String(req.body?.body || '').trim();
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5)
+    throw new HttpError(400, 'rating must be a whole number from 1 to 5');
+  if (!body) throw new HttpError(400, 'write a few words to go with the rating');
+
+  db.prepare(`INSERT INTO reviews (review_id, contract_id, reviewer_role, reviewer_user_id, rating, body)
+              VALUES (?,?,?,?,?,?)`).run(id('rev'), c.contract_id, role, req.user.user_id, rating, body);
+  logEvent(req.user.user_id, c.contract_id, 'review.submitted', String(rating));
+  // The notice says a review exists, never what it says — that stays sealed.
+  notify(otherParty(c, role), 'review',
+    state.theirs ? `The ${role} reviewed you — both reviews are now published`
+                 : `The ${role} has reviewed you — leave yours to see it`,
+    `/contracts/${c.contract_id}`);
+  ok(res, { contract: contractView(c.contract_id, role) });
 }));
 
 const loadMilestone = (milestoneId) => {
@@ -619,7 +736,10 @@ app.post('/api/milestones/:id/fund', requireUser('brand'), wrap((req, res) => {
   db.prepare(`UPDATE milestones SET status = 'in_progress', funded_at = datetime('now')
               WHERE milestone_id = ?`).run(m.milestone_id);
   logEvent(req.user.user_id, m.milestone_id, 'milestone.funded', auth.reference);
-  ok(res, { ...result, reference: auth.reference, contract: contractView(c.contract_id) });
+  notify(userOfCreator(c.creator_id), 'funding',
+    `Milestone ${m.sequence_no} is funded — ${fmt(m.amount_minor, c)} is in escrow and you can start`,
+    `/contracts/${c.contract_id}`);
+  ok(res, { ...result, reference: auth.reference, contract: contractView(c.contract_id, req.user.role) });
 }));
 
 // UC-08 — submit a deliverable against a funded milestone.
@@ -636,7 +756,10 @@ app.post('/api/milestones/:id/submit', requireUser('creator'), wrap((req, res) =
   db.prepare(`UPDATE milestones SET status = 'submitted', submitted_at = datetime('now')
               WHERE milestone_id = ?`).run(m.milestone_id);
   logEvent(req.user.user_id, m.milestone_id, 'milestone.submitted');
-  ok(res, { contract: contractView(c.contract_id) });
+  notify(userOfBrand(c.brand_id), 'submission',
+    `${creatorOf(req).display_name} submitted work for milestone ${m.sequence_no} — review it`,
+    `/contracts/${c.contract_id}`);
+  ok(res, { contract: contractView(c.contract_id, req.user.role) });
 }));
 
 // FR-30 — a bounded number of revisions, so scope cannot become open-ended.
@@ -651,10 +774,14 @@ app.post('/api/milestones/:id/revise', requireUser('brand'), wrap((req, res) => 
               revision_count = revision_count + 1 WHERE milestone_id = ?`)
     .run(m.milestone_id);
   logEvent(req.user.user_id, m.milestone_id, 'milestone.revision_requested', req.body?.reason);
-  ok(res, { contract: contractView(c.contract_id) });
+  notify(userOfCreator(c.creator_id), 'submission',
+    `A revision was requested on milestone ${m.sequence_no}`, `/contracts/${c.contract_id}`);
+  ok(res, { contract: contractView(c.contract_id, req.user.role) });
 }));
 
 const commissionOn = (amount, c) => Math.round(amount * c.commission_rate);
+/** Display only: minor units → "NGN 240,000". Never used in arithmetic. */
+const fmt = (minor, c) => `${c.currency_code} ${(minor / 100).toLocaleString('en-US')}`;
 
 /**
  * Move a milestone's escrow to its final destination. Every way money leaves
@@ -695,7 +822,14 @@ const TERMINAL = ['accepted', 'refunded', 'split', 'cancelled'];
 function completeIfDone(c) {
   const ms = db.prepare('SELECT status FROM milestones WHERE contract_id = ?').all(c.contract_id);
   if (!ms.every((m) => TERMINAL.includes(m.status))) return;
-  db.prepare("UPDATE contracts SET status = 'completed' WHERE contract_id = ?").run(c.contract_id);
+  db.prepare(`UPDATE contracts SET status = 'completed', completed_at = datetime('now')
+              WHERE contract_id = ?`).run(c.contract_id);
+  // FR-37 — completion opens the review window for both sides.
+  for (const [user, other] of [[userOfCreator(c.creator_id), 'the brand'],
+                               [userOfBrand(c.brand_id), 'the creator']]) {
+    notify(user, 'review', `Contract complete — review ${other} within 14 days`,
+      `/contracts/${c.contract_id}`);
+  }
   // Only work the creator was actually paid for counts toward their record.
   if (ms.some((m) => ['accepted', 'split'].includes(m.status))) {
     db.prepare(`UPDATE creator_profiles SET completed_contracts = completed_contracts + 1
@@ -725,7 +859,10 @@ app.post('/api/milestones/:id/accept', requireUser('brand'), wrap((req, res) => 
 
   logEvent(req.user.user_id, m.milestone_id, 'milestone.accepted',
            `net ${result.net_minor}, commission ${result.commission_minor}`);
-  ok(res, { ...result, contract: contractView(c.contract_id) });
+  notify(userOfCreator(c.creator_id), 'acceptance',
+    `Milestone ${m.sequence_no} accepted — ${fmt(result.net_minor, c)} released to your balance`,
+    `/contracts/${c.contract_id}`);
+  ok(res, { ...result, contract: contractView(c.contract_id, req.user.role) });
 }));
 
 // FR-35 — either party may dispute a submitted deliverable. The milestone is
@@ -751,7 +888,12 @@ app.post('/api/milestones/:id/dispute', requireUser('creator', 'brand'), wrap((r
       .run(m.milestone_id);
   })();
   logEvent(req.user.user_id, m.milestone_id, 'milestone.disputed', reason);
-  ok(res, { dispute_id, contract: contractView(c.contract_id) });
+  notify(otherParty(c, req.user.role), 'dispute',
+    `The ${req.user.role} disputed milestone ${m.sequence_no} — it is frozen until an administrator rules`,
+    `/contracts/${c.contract_id}`);
+  notify(admins(), 'dispute', `New dispute on milestone ${m.sequence_no} (${fmt(m.amount_minor, c)})`,
+    '/disputes');
+  ok(res, { dispute_id, contract: contractView(c.contract_id, req.user.role) });
 }));
 
 // ---------------------------------------------------------------- admin
@@ -818,6 +960,10 @@ app.post('/api/admin/disputes/:id/resolve', requireUser('admin'), wrap((req, res
   })();
 
   logEvent(req.user.user_id, m.milestone_id, `dispute.${outcome}`, note);
+  notify([userOfCreator(c.creator_id), userOfBrand(c.brand_id)], 'dispute',
+    `Dispute on milestone ${m.sequence_no} resolved: ${
+      { release: 'released to the creator', refund: 'refunded to the brand', split: 'split' }[outcome]}`,
+    `/contracts/${c.contract_id}`);
   ok(res, { ...result, outcome, dispute: disputeView('WHERE d.dispute_id = ?', [d.dispute_id])[0] });
 }));
 
@@ -865,6 +1011,7 @@ app.post('/api/payouts', requireUser('creator'), wrap((req, res) => {
   })();
 
   logEvent(req.user.user_id, payout_id, 'payout.settled', String(amount));
+  notify(req.user.user_id, 'payout', `${fmt(amount, p)} is on its way to your bank account`, '/money');
   ok(res, { payout_id, amount_minor: amount, reference: transfer.reference });
 }));
 
@@ -882,6 +1029,13 @@ app.get('/api/ledger/reconcile', wrap((_req, res) => ok(res, reconcile())));
 
 app.get('/api/events', wrap((_req, res) => ok(res, db.prepare(
   'SELECT * FROM events ORDER BY event_id DESC LIMIT 50').all())));
+
+// FR-40 — the signed-in user's inbox, and marking it read.
+app.get('/api/notifications', requireUser(), wrap((req, res) => ok(res, inbox(req.user.user_id))));
+app.post('/api/notifications/read', requireUser(), wrap((req, res) => {
+  markRead(req.user.user_id, req.body?.notification_id ?? null);
+  ok(res, inbox(req.user.user_id));
+}));
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 

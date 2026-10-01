@@ -20,6 +20,14 @@ import { db } from './db.js';
 
 export class LedgerError extends Error {}
 
+/**
+ * The one settlement currency. Brands fund and creators are paid in naira, so
+ * every amount_minor is kobo. The ledger stays multi-currency underneath (each
+ * row carries its ISO 4217 code), so adding a currency later is a product
+ * decision, not a schema change.
+ */
+export const CURRENCY = 'NGN';
+
 const insert = db.prepare(`
   INSERT INTO ledger_entries
     (transaction_id, account_type, account_owner_id, direction, amount_minor,
@@ -35,7 +43,7 @@ const insert = db.prepare(`
  * @returns {{transactionId: string, applied: boolean}}  applied=false means this
  *          transaction had already been posted and was therefore a no-op.
  */
-export function post(lines, { idempotencyKey, milestoneId = null, currency = 'NGN' }) {
+export function post(lines, { idempotencyKey, milestoneId = null, currency = CURRENCY }) {
   if (!idempotencyKey) throw new LedgerError('an idempotency key is required');
   if (!lines?.length) throw new LedgerError('a transaction needs at least two lines');
 

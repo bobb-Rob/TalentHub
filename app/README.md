@@ -54,10 +54,11 @@ screen. Every seeded account uses the password `password123`.
 npm run smoke
 ```
 
-80 assertions against a running API, in four parts: the escrow path itself,
+103 assertions against a running API: the escrow path itself,
 accounts and profiles (sign-up, profile, skills, portfolio, audience, ID check),
 the brief and contract lifecycle (drafts, shortlisting, contract acceptance,
-cancellation), and disputes (every ruling, and the ledger behind each). They
+cancellation), disputes (every ruling, and the ledger behind each), reviews
+(including the sealing and 14-day rules) and notifications. They
 include the cases that should fail: applying twice to one
 brief, funding before the creator accepts, submitting against an unfunded
 milestone, a creator accepting their own work, funding the same milestone twice,
@@ -111,12 +112,14 @@ Every route checks the caller's role and ownership on the server.
 | POST | `/api/milestones/:id/dispute` | submitted milestones only; freezes it |
 | GET | `/api/admin/disputes` | admin: the queue, with deliverables |
 | POST | `/api/admin/disputes/:id/resolve` | admin: release, refund or split, with a reason |
+| POST | `/api/contracts/:id/review` | once per party, within 14 days of completion |
+| GET · POST | `/api/notifications` · `/api/notifications/read` | your inbox; mark one or all read |
 | GET | `/api/creator/balance` · POST `/api/payouts` | withdrawal |
 | GET | `/api/ledger` · `/api/ledger/reconcile` | the audit view |
 
 ## Not built yet
 
-Reviews, messaging and notifications (the rest of Increment 5), and the rest of
-the admin console (Increment 6). Portfolio items have no file upload yet, KYC
+Messaging (the last of Increment 5) and the rest of the admin console
+(Increment 6). Notification emails are simulated. Portfolio items have no file upload yet, KYC
 and payments are simulated, and audience figures are not fetched from the
 platforms.
