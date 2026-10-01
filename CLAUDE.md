@@ -50,7 +50,7 @@ cd app
 npm install
 npm run reset     # wipes and seeds demo data
 npm run dev       # API on :4000, Vite on :5173
-npm run smoke     # 103 assertions: escrow, accounts, briefs, disputes, reviews, notifications
+npm run smoke     # 104 assertions: escrow, accounts, briefs, disputes, reviews, notifications
 ```
 
 Every seeded account uses the password `password123`. Sign-in has demo buttons.
@@ -81,7 +81,9 @@ server/  Express, better-sqlite3
 These come straight from the design chapter, and the tests enforce them.
 
 1. **Money is integer minor units.** No floats anywhere in the financial path.
-   `amount_minor` is kobo/pesewas/cents, with an explicit ISO 4217 code.
+   `amount_minor` is kobo, with an explicit ISO 4217 code. TalentHub settles in
+   **NGN only** for now (`CURRENCY` in `server/ledger.js`); the API refuses any
+   other code, and the ledger keeps the code per row so more can be added later.
 2. **The ledger is append-only.** Nothing UPDATEs or DELETEs `ledger_entries`.
    Balances are derived by summing.
 3. **Every transaction balances.** `post()` refuses to write unless debits equal
