@@ -205,10 +205,13 @@ const cp = await call('PUT', '/creator/profile', { token: ct, body: {
   display_name: 'Smoke Creator', biography: 'Made by the smoke test.', country_code: 'KE',
   city: 'Mombasa', primary_discipline: 'Photography', languages: 'English, Swahili',
   engagement_modes: ['commission', 'reach'], day_rate_minor: 500000,
-  currency_code: 'KES', availability: 'limited' } });
+  currency_code: 'NGN', availability: 'limited' } });
 check('the creator publishes a profile (FR-08, FR-13, FR-14)',
-  cp.body?.availability === 'limited' && cp.body?.languages === 'English, Swahili',
-  JSON.stringify(cp.body));
+  cp.body?.availability === 'limited' && cp.body?.languages === 'English, Swahili' &&
+  cp.body?.currency_code === 'NGN', JSON.stringify(cp.body));
+const badCurrency = await call('PUT', '/creator/profile', { token: ct, body: {
+  day_rate_minor: 500000, currency_code: 'KES' } });
+check('a rate in any currency but NGN is refused', badCurrency.status === 400);
 
 const skills = (await call('GET', '/skills')).body;
 const photo = skills.filter((s) => s.discipline === 'Photography').slice(0, 2);

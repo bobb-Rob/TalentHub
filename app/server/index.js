@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { db, id, logEvent } from './db.js';
-import { post, balance, milestoneLedger, reconcile, LedgerError } from './ledger.js';
+import { post, balance, milestoneLedger, reconcile, LedgerError, CURRENCY } from './ledger.js';
 import { register, login, currentUser, requireUser, HttpError } from './auth.js';
 import { notify, userOfCreator, userOfBrand, admins, inbox, markRead } from './notify.js';
 
@@ -104,6 +104,13 @@ function checkCreatorProfile(b) {
   // Money is integer minor units (rule 1); a fractional rate is a client bug.
   if (b.day_rate_minor != null && (!Number.isInteger(b.day_rate_minor) || b.day_rate_minor < 0))
     throw new HttpError(400, 'the day rate must be a whole number of minor units');
+  checkCurrency(b);
+}
+
+/** NGN only for now: refuse anything else rather than store a rate nobody can pay in. */
+function checkCurrency(b) {
+  if (b.currency_code != null && b.currency_code !== CURRENCY)
+    throw new HttpError(400, `TalentHub settles in ${CURRENCY} only`);
 }
 
 app.put('/api/creator/profile', requireUser('creator'), wrap((req, res) => {
@@ -121,7 +128,7 @@ app.put('/api/creator/profile', requireUser('creator'), wrap((req, res) => {
       b.biography || '', b.country_code || 'NG', b.city || '',
       b.primary_discipline || 'Motion design', b.languages || '',
       (b.engagement_modes || ['commission']).join(','),
-      b.day_rate_minor ?? null, b.currency_code || 'NGN',
+      b.day_rate_minor ?? null, CURRENCY,
       b.availability || 'available');
     logEvent(req.user.user_id, profile_id, 'profile.published');
   } else {
@@ -141,7 +148,7 @@ app.put('/api/creator/profile', requireUser('creator'), wrap((req, res) => {
       b.display_name ?? null, b.biography ?? null, b.country_code ?? null,
       b.city ?? null, b.primary_discipline ?? null, b.languages ?? null,
       b.engagement_modes ? b.engagement_modes.join(',') : null,
-      b.day_rate_minor ?? null, b.currency_code ?? null, b.availability ?? null,
+      b.day_rate_minor ?? null, CURRENCY, b.availability ?? null,
       profile.profile_id);
     logEvent(req.user.user_id, profile.profile_id, 'profile.updated');
   }
@@ -324,6 +331,7 @@ app.post('/api/briefs', requireUser('brand'), wrap((req, res) => {
   if (!brand) throw new HttpError(400, 'publish your organisation profile first');
   const b = req.body || {};
   if (!b.title || !b.description) throw new HttpError(400, 'a brief needs a title and description');
+  checkCurrency(b);
   const status = b.status || 'published';
   if (!['draft', 'published'].includes(status))            // FR-22
     throw new HttpError(400, 'a new brief is either a draft or published');
@@ -335,7 +343,7 @@ app.post('/api/briefs', requireUser('brand'), wrap((req, res) => {
     brief_id, brand.brand_id, b.engagement_mode || 'commission', b.title,
     b.description, (b.required_skills || []).join(','),
     b.budget_min_minor ?? null, b.budget_max_minor ?? null,
-    b.currency_code || 'NGN', b.closes_at || null, status);
+    CURRENCY, b.closes_at || null, status);
   logEvent(req.user.user_id, brief_id, `brief.${status === 'draft' ? 'drafted' : 'published'}`, b.title);
   ok(res, db.prepare('SELECT * FROM briefs WHERE brief_id = ?').get(brief_id));
 }));

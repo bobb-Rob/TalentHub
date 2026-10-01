@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from './api.js';
+import { Icon } from './components/ui.jsx';
 
 const POLL_MS = 30000;
 
@@ -42,7 +43,7 @@ export function NotificationBell({ go, route }) {
     <div className="bell" ref={ref}>
       <button onClick={() => setOpen(!open)} aria-expanded={open}
               aria-label={`Notifications, ${box.unread} unread`}>
-        <span aria-hidden="true">🔔</span>
+        <Icon name="bell" size={19} />
         {box.unread > 0 && <span className="count">{box.unread > 99 ? '99+' : box.unread}</span>}
       </button>
       {open && (

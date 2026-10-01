@@ -7,6 +7,7 @@ import {
 import { CreatorProfile, BrandProfile } from './profile.jsx';
 import { AdminDisputes } from './admin.jsx';
 import { NotificationBell } from './notifications.jsx';
+import { Wordmark } from './components/ui.jsx';
 
 /** A tiny hash router — enough for the MVP, no dependency. */
 function useRoute() {
@@ -78,23 +79,27 @@ export default function App() {
 
   return (
     <>
-      <div className="topbar">
-        <div className="brand">TalentHub<span>MVP</span></div>
-        <div className="nav">
-          {(user.profile || isAdmin) && tabs.map(([path, label]) => (
-            <button key={path}
-                    className={route.startsWith(path) ? 'on' : ''}
-                    onClick={() => go(path)}>
-              {label}
-            </button>
-          ))}
-          <NotificationBell go={go} route={route} />
-          <span className="who">
-            {name} · {user.role}
-          </span>
-          <button onClick={signOut}>Sign out</button>
+      <header className="topbar">
+        <div className="topbar-in">
+          <Wordmark />
+          <nav className="nav">
+            {(user.profile || isAdmin) && tabs.map(([path, label]) => (
+              <button key={path}
+                      className={route.startsWith(path) ? 'on' : ''}
+                      onClick={() => go(path)}>
+                {label}
+              </button>
+            ))}
+          </nav>
+          <div className="tools">
+            <NotificationBell go={go} route={route} />
+            <span className="who">
+              <strong>{name}</strong>{user.role}
+            </span>
+            <button onClick={signOut}>Sign out</button>
+          </div>
         </div>
-      </div>
+      </header>
       <div key={route}>{view}</div>
     </>
   );
